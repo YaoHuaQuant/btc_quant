@@ -1,10 +1,12 @@
-import logging
 from collections import namedtuple
 from datetime import datetime
 from typing import List
+import pandas as pd
+import time
 
+from data_collection.api.binance_api import get_binance_klines
 from log import *
-from db import db
+from data_collection.db import db
 
 table_name = 'kline_btc_usdt_1m'
 
@@ -82,23 +84,36 @@ KlineBtcUSDT1mDao = namedtuple(
     ]
 )
 
+KlineBtcUSDT1mDaoSimple = namedtuple(
+    'KlineBtcUSDT1mDao',
+    [
+        'datetime', 'open', 'high', 'low', 'close', 'volume'
+    ]
+)
+
+
+def from_KlineBtcUSDT1mDao_to_KlineBtcUSDT1mDaoSimple(data: KlineBtcUSDT1mDao) -> KlineBtcUSDT1mDaoSimple:
+    return KlineBtcUSDT1mDaoSimple(data[0], data[1], data[2], data[3], data[4], data[5])
+
+
+def from_list_KlineBtcUSDT1mDao_to_KlineBtcUSDT1mDaoSimple(data: List[KlineBtcUSDT1mDao]) -> List[
+    KlineBtcUSDT1mDaoSimple]:
+    result = []
+    for x in data:
+        result.append(from_KlineBtcUSDT1mDao_to_KlineBtcUSDT1mDaoSimple(x))
+    return result
+
 
 class KlineBtcUSDT1mConnector:
     def __init__(self):
         self.db_connection = db
 
-    def select(self, from_timestamp: datetime, to_timestamp: datetime) -> List[KlineBtcUSDT1mDao]:
-        query = f"SELECT * FROM kline_btc_usdt_1m WHERE open_time BETWEEN %(from_timestamp)s AND %(to_timestamp)s"
+    def select(self, from_timestamp: datetime, to_timestamp: datetime, order: str = 'ASC') -> List[KlineBtcUSDT1mDao]:
+        if order != 'ASC' and order != 'DESC':
+            raise ValueError('order is not ASC or DESC')
+        query = f"SELECT DISTINCT * FROM kline_btc_usdt_1m WHERE open_time BETWEEN %(from_timestamp)s AND %(to_timestamp)s ORDER BY open_time {order}"
         params = {'from_timestamp': from_timestamp, 'to_timestamp': to_timestamp}
         result = self.db_connection.execute(query, params)
-        # result = []
-        # for data in self.db_connection.execute(query, params):
-        #     result.append(
-        #         KlineBtcUSDT1mDao(
-        #             data[0], data[1], data[2], data[3], data[4], data[5]
-        #         )
-        #     )
-        # logging.info(f"Data select from kline_btc_usdt_1m successfully.")
         return result
 
     def insert_single(self, data: KlineBtcUSDT1mDao):
@@ -132,6 +147,38 @@ class KlineBtcUSDT1mConnector:
         query = f"SELECT MAX(close_time) FROM kline_btc_usdt_1m"
         result = self.db_connection.execute(query)[0][0]
         return result
+
+    def save_dataframe_to_db(self, df: pd.DataFrame):
+        tuples = [KlineBtcUSDT1mDao(
+            x[0], float(x[1]), float(x[2]), float(x[3]), float(x[4]), float(x[5]), x[6], float(x[7]), float(x[8]),
+            float(x[9]), float(x[10]),
+        ) for x in df.values]
+        self.insert_many(tuples)
+
+    def collect_up2date_data(
+            self, from_date:
+            datetime,
+            limit: int = 1000,
+            sleep_pre_loop: int = 1,
+            rest_every_n_loop: int = 100,
+            rest_sleep_time: int = 60
+    ):
+        index = 0
+        date_timestamp = from_date
+        df = get_binance_klines(date_timestamp)
+        self.save_dataframe_to_db(df)
+        while len(df) == limit:
+            logging.info("collection data from:" + str(date_timestamp))
+            # logging.info("len(df):" + str(len(df)))
+            date_timestamp = df["Close Time"].max()
+            df = get_binance_klines(date_timestamp, limit=limit)
+            self.save_dataframe_to_db(df)
+            index += 1
+            time.sleep(sleep_pre_loop)
+            if index > rest_every_n_loop:
+                time.sleep(rest_sleep_time)
+                index = 0
+        logging.info("history of kline_btc_usdt_1m is up2date")
 
 
 def test_select():
