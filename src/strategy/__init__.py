@@ -2,5 +2,11 @@ from abc import ABC, abstractmethod
 import backtrader as bt
 
 
-class StrategyInterface(bt.Strategy):
-    pass
+class StrategyInterface(ABC):
+    @abstractmethod
+    def next(self):
+        pass
+
+    @abstractmethod
+    def notify_order(self, order: bt.Order):
+        pass
