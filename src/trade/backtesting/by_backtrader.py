@@ -8,7 +8,7 @@ from log import *
 import backtrader as bt
 import pandas as pd
 
-from strategy.maker_only_volatility_strategy import MakerOnlyVolatilityStrategy
+from strategy.maker_only_volatility_strategy import MakerOnlyLongOnlyVolatilityStrategy
 
 # 0.02% 的交易手续费
 COMMISSION = 0.0002
@@ -22,10 +22,6 @@ TO_DATE = datetime(2024, 12, 24, 0, 0)
 
 
 class BacktraderStrategy(bt.Strategy):
-    # 定义参数
-    maker_price_offset = 50  # 假设买单卖单都离当前价格0.1单位
-    order_size = 0.01  # 每次挂单的大小
-
     def __init__(self, strategy: StrategyInterface):
         self.strategy = strategy
         self.strategy.super_strategy = self
@@ -62,7 +58,7 @@ def test():
     cerebro.adddata(data)
 
     # 加载策略
-    strategy_interface = MakerOnlyVolatilityStrategy()
+    strategy_interface = MakerOnlyLongOnlyVolatilityStrategy()
     cerebro.addstrategy(BacktraderStrategy, strategy_interface)
 
     # 设置初始资金
