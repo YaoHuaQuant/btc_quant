@@ -1,5 +1,3 @@
-import logging
-
 from data_collection.api import KlineInterface
 from datetime import datetime
 from data_collection.dao.kline_btc_usdt_1m import KlineBtcUSDT1mConnector, KlineBtcUSDT1mDao

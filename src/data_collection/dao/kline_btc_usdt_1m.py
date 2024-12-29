@@ -1,3 +1,4 @@
+import logging
 from collections import namedtuple
 from datetime import datetime
 from typing import List
@@ -138,15 +139,16 @@ class KlineBtcUSDT1mConnector:
         # logging.info(f"Data insert into kline_btc_usdt_1m successfully.")
 
     def insert_many(self, data: List[KlineBtcUSDT1mDao]):
-        query = f"INSERT INTO kline_btc_usdt_1m (open_time, open_price, high_price, low_price, close_price, volume, \
-            close_time, quote_asset_volume, num_of_trades,taker_buy_base_volume, taker_buy_quote_volume) VALUES"
+        query = f"INSERT INTO kline_btc_usdt_1m (open_time, open_price, high_price, low_price, close_price, volume, close_time, quote_asset_volume, num_of_trades,taker_buy_base_volume, taker_buy_quote_volume) VALUES"
+        # logging.info(f"sql:{query}")
+        # logging.info(f"data:{data}")
         self.db_connection.execute(query, data)
         # logging.info(f"Data inserted into {table_name} successfully.")
 
     def last_date(self) -> datetime:
         query = f"SELECT MAX(close_time) FROM kline_btc_usdt_1m"
-        result = self.db_connection.execute(query)[0][0]
-        return result
+        result = self.db_connection.execute(query)
+        return result[0][0]
 
     def save_dataframe_to_db(self, df: pd.DataFrame):
         tuples = [KlineBtcUSDT1mDao(
@@ -159,7 +161,7 @@ class KlineBtcUSDT1mConnector:
             self, from_date:
             datetime,
             limit: int = 1000,
-            sleep_pre_loop: int = 1,
+            sleep_pre_loop: int = 3,
             rest_every_n_loop: int = 100,
             rest_sleep_time: int = 60
     ):
@@ -184,8 +186,8 @@ class KlineBtcUSDT1mConnector:
 def test_select():
     connector = KlineBtcUSDT1mConnector()
 
-    from_timestamp = datetime(2023, 12, 1, 0, 0)
-    to_timestamp = datetime(2023, 12, 2, 0, 0)
+    from_timestamp = datetime(2020, 12, 1, 0, 0)
+    to_timestamp = datetime(2020, 12, 2, 0, 0)
 
     result = connector.select(from_timestamp, to_timestamp)
     # 输出查询结果

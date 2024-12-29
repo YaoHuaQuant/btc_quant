@@ -1,6 +1,6 @@
-<mxfile host="Electron" modified="2024-12-25T15:13:05.709Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.6.4 Chrome/124.0.6367.207 Electron/30.0.6 Safari/537.36" etag="de9zcse_4qA_gmka2SJr" version="24.6.4" type="device">
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/25.0.2 Chrome/128.0.6613.186 Electron/32.2.5 Safari/537.36" version="25.0.2">
   <diagram name="第 1 页" id="F4dAkYMisPp_Crrg1WQa">
-    <mxGraphModel dx="1562" dy="909" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1793" dy="1056" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -31,7 +31,7 @@
         <mxCell id="Utv8JqaEtYpSMMh2lk40-1" value="&lt;font face=&quot;Helvetica&quot;&gt;UI&lt;/font&gt;&lt;div style=&quot;font-size: 16px;&quot;&gt;&lt;font face=&quot;Sy8tqLKlV03e3ipVPrkG&quot;&gt;用户界面层&lt;/font&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#000000;fontSize=16;fontFamily=Helvetica;dashed=1;" parent="1" vertex="1">
           <mxGeometry x="40" width="1040" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="Utv8JqaEtYpSMMh2lk40-3" value="数据持久化&lt;div&gt;Clickhouse&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fontSize=16;fontFamily=Helvetica;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;" parent="1" vertex="1">
+        <mxCell id="Utv8JqaEtYpSMMh2lk40-3" value="数据持久化&lt;div&gt;Clickhouse&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fontSize=16;fontFamily=Helvetica;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontColor=#000000;" parent="1" vertex="1">
           <mxGeometry x="641.5" y="345" width="127" height="165" as="geometry" />
         </mxCell>
         <mxCell id="Utv8JqaEtYpSMMh2lk40-4" value="实时数据采集" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#000000;fontSize=14;fontFamily=Helvetica;movable=1;resizable=1;rotatable=1;deletable=1;editable=1;locked=0;connectable=1;verticalAlign=top;" parent="1" vertex="1">
@@ -187,7 +187,7 @@
           <mxGeometry x="155" y="815" width="100" height="60" as="geometry" />
         </mxCell>
         <mxCell id="gfCPOhcdJ8noWJPsk6_X-1" value="&lt;h1 style=&quot;margin-top: 0px;&quot;&gt;数据采集模块-数据接口抽象&lt;/h1&gt;&lt;p&gt;1. k线&lt;br&gt;入参：( from_date:datetime, to_date:datetime, granularity:str=&#39;1m&#39;)&lt;br&gt;出参：( List[KlineDao] )&lt;/p&gt;&lt;p&gt;2. 订单 - todo&lt;/p&gt;&lt;p&gt;3. 资金 - todo&lt;/p&gt;" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;" parent="1" vertex="1">
-          <mxGeometry x="1130" y="30" width="410" height="520" as="geometry" />
+          <mxGeometry x="1130" y="30" width="410" height="160" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
