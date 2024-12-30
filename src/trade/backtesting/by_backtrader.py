@@ -18,12 +18,13 @@ BALANCE = 1000000
 LEVERAGE = 1.0
 # 数据区间
 FROM_DATE = datetime(2024, 12, 1, 0, 0)
-TO_DATE = datetime(2024, 12, 24, 0, 0)
+TO_DATE = datetime(2024, 12, 2, 0, 0)
 
 
 class BacktraderStrategy(bt.Strategy):
     def __init__(self, strategy: StrategyInterface):
         self.strategy = strategy
+        self.strategy.commission_rate = self.broker.getcommissioninfo(self.data).p.commission
         self.strategy.super_strategy = self
 
     def next(self):
