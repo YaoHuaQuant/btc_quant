@@ -1,7 +1,6 @@
 import math
 
 import backtrader as bt
-from decimal import Decimal, ROUND_FLOOR, ROUND_CEILING, ROUND_HALF_UP
 from log import *
 
 
@@ -11,8 +10,8 @@ class MyOrderPair:
     包含一个open order和一个close order
     """
 
-    def __init__(self, open_price: Decimal, close_price: Decimal, quantity: Decimal,
-                 commission_rate: Decimal = Decimal(0.0002)):
+    def __init__(self, open_price: float, close_price: float, quantity: float,
+                 commission_rate: float = 0.0002):
         """
         先有开仓单，然后才有MyOrderPair对象。
         属性：
@@ -72,7 +71,7 @@ class MyOrderPair:
         self.actual_commission = self.expected_commission
         self.actual_gross_value = self.expected_gross_value
 
-    def update_open_price(self, price: Decimal):
+    def update_open_price(self, price: float):
         """
         修改open_price
         只有在 'opening' 状态下可以调用
@@ -87,7 +86,7 @@ class MyOrderPair:
             self.expected_commission = (self.open_price + self.close_price) * self.commission_rate * self.quantity
             self.expected_gross_value = (self.close_price - self.open_price) * self.quantity
 
-    def update_close_price(self, price: Decimal):
+    def update_close_price(self, price: float):
         """
         修改close_price
         在 'opening' 和 'closing' 状态下均可使用
@@ -106,7 +105,7 @@ class MyOrderPair:
                 self.expected_commission = self.actual_commission + self.close_price * self.commission_rate * self.quantity
                 self.expected_gross_value = (self.close_price - self.open_price) * self.quantity
 
-    def actual_net_value(self) -> Decimal | None:
+    def actual_net_value(self) -> float | None:
         if self.status != 'closed':
             return None
         else:
@@ -116,12 +115,12 @@ class MyOrderPair:
         self.present_order = order
 
     @staticmethod
-    def check_price(price: Decimal):
+    def check_price(price: float):
         if price <= 0:
             raise ValueError(f'open must be positive, not "{price}"')
 
     @staticmethod
-    def check_quantity(quantity: Decimal):
+    def check_quantity(quantity: float):
         if quantity <= 0:
             raise ValueError(f'quantity must be positive, not "{quantity}"')
 
@@ -143,8 +142,7 @@ class MyOrderArray:
     数组的每个下标表示订单的价格，None表示该价格不存在挂单，MyOrderPair表示该价格存在一个挂单
     """
 
-    def __init__(self, max_open_price: Decimal, min_open_price: Decimal, max_close_price: Decimal,
-                 min_close_price: Decimal,
+    def __init__(self, max_open_price: float, min_open_price: float, max_close_price: float, min_close_price: float,
                  order_type: str, direction: str, length: int = -1):
         """
 
@@ -229,46 +227,33 @@ class MyOrderArray:
     def get_order_by_position(self, position: int) -> MyOrderPair | None:
         return self.data[position]
 
-    def get_position_by_price(self, price: Decimal) -> int:
+    def get_position_by_price(self, price: float) -> int:
         self.check_price(price)
         if self.order_type == 'open':
             if self.direction == 'long':
                 # 做多开仓 买入 按价格降序排列
-                # position = math.ceil(
-                #     (self.max_open_price - price) * self.length / (self.max_open_price - self.min_open_price))
-                position = (
-                        (self.max_open_price - price) * self.length / (self.max_open_price - self.min_open_price)
-                ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-
+                position = round(
+                    (self.max_open_price - price) * self.length / (self.max_open_price - self.min_open_price))
             else:
                 # 做空开仓 卖出 按价格升序排列
-                # position = math.ceil(
-                #     (price - self.min_open_price) * self.length / (self.max_open_price - self.min_open_price))
-                position = (
-                        (price - self.min_open_price) * self.length / (self.max_open_price - self.min_open_price)
-                ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+                position = round(
+                    (price - self.min_open_price) * self.length / (self.max_open_price - self.min_open_price))
         else:
             if self.direction == 'long':
                 # 做多平仓 卖出 按价格升序排列
-                # position = math.ceil(
-                #     (price - self.min_close_price) * self.length / (self.max_close_price - self.min_close_price))
-                position = (
-                        (price - self.min_close_price) * self.length / (self.max_close_price - self.min_close_price)
-                ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+                position = round(
+                    (price - self.min_close_price) * self.length / (self.max_close_price - self.min_close_price))
             else:
                 # 做空平仓 买入 按价格降序排列
-                # position = math.ceil(
-                #     (self.max_close_price - price) * self.length / (self.max_close_price - self.min_close_price))
-                position = (
-                        (self.max_close_price - price) * self.length / (self.max_close_price - self.min_close_price)
-                ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-        return int(position)
+                position = round(
+                    (self.max_close_price - price) * self.length / (self.max_close_price - self.min_close_price))
+        return position
 
-    def get_order_by_price(self, price: Decimal) -> MyOrderPair | None:
+    def get_order_by_price(self, price: float) -> MyOrderPair | None:
         position = self.get_position_by_price(price)
         return self.get_order_by_position(position)
 
-    def get_price_by_position(self, position: int) -> Decimal:
+    def get_price_by_position(self, position: int) -> float:
         self.check_position(position)
         if self.order_type == 'open':
             if self.direction == 'long':
@@ -294,7 +279,7 @@ class MyOrderArray:
         else:
             return True
 
-    def check_price(self, price: Decimal):
+    def check_price(self, price: float):
         if price <= 0:
             raise ValueError(f'open must be positive, not "{price}"')
         # if self.order_type == 'open':
@@ -345,10 +330,9 @@ class MyOrderArrayTriple:
     3.closed OrderArray
     """
 
-    def __init__(self, max_open_price: Decimal, min_open_price: Decimal, max_close_price: Decimal,
-                 min_close_price: Decimal,
+    def __init__(self, max_open_price: float, min_open_price: float, max_close_price: float, min_close_price: float,
                  open_array_length: int, close_array_length: int, direction: str = 'long',
-                 commission_rate: Decimal = 0.0002):
+                 commission_rate: float = 0.0002):
         """
         属性：
         1.open_order_array: MyOrderArray类型
@@ -399,14 +383,14 @@ class MyOrderArrayTriple:
         )
         self.closed_order_array = []
 
-    def add_open_order(self, open_price: Decimal, close_price: Decimal, quantity: Decimal) -> MyOrderPair | None:
+    def add_open_order(self, open_price: float, close_price: float, quantity: int) -> MyOrderPair | None:
         order = MyOrderPair(open_price, close_price, quantity, commission_rate=self.commission_rate)
         return self.add_open_order_object(order)
 
     def add_open_order_object(self, order: MyOrderPair) -> MyOrderPair | None:
         return self.open_order_array.add_order(order)
 
-    def get_open_order(self, open_price: Decimal) -> MyOrderPair:
+    def get_open_order(self, open_price: float) -> MyOrderPair:
         order = self.open_order_array.get_order_by_price(open_price)
         if order is None:
             raise ValueError(f'can not find close order with open_price-"{open_price}"')
@@ -415,13 +399,13 @@ class MyOrderArrayTriple:
     def add_close_order_object(self, order: MyOrderPair) -> MyOrderPair | None:
         return self.close_order_array.add_order(order)
 
-    def get_close_order(self, close_price: Decimal) -> MyOrderPair:
+    def get_close_order(self, close_price: float) -> MyOrderPair:
         order = self.close_order_array.get_order_by_price(close_price)
         if order is None:
             raise ValueError(f'can not find close order with open_price-"{close_price}"')
         return order
 
-    def open_order_complete(self, open_price: Decimal) -> MyOrderPair | None:
+    def open_order_complete(self, open_price: float) -> MyOrderPair | None:
         position = self.open_order_array.get_position_by_price(open_price)
         order = self.open_order_array.pop(position)
         if order is None:
@@ -430,7 +414,7 @@ class MyOrderArrayTriple:
         new_order = self.add_close_order_object(order)
         return new_order
 
-    def close_order_complete(self, close_price: Decimal):
+    def close_order_complete(self, close_price: float):
         position = self.close_order_array.get_position_by_price(close_price)
         order = self.close_order_array.pop(position)
         if order is None:
@@ -444,7 +428,7 @@ class MyOrderArrayTriple:
             raise ValueError(f'direction must be "long" or "short", not "{direction}"')
 
     @staticmethod
-    def check_price(price: Decimal):
+    def check_price(price: float):
         if price <= 0:
             raise ValueError(f'open must be positive, not "{price}"')
 
@@ -564,13 +548,14 @@ def test_my_order_array_triple():
 
 def test_my_order_array_consistency():
     # 一致性测试
-    max_open_price = Decimal("102504.3525")
-    min_open_price = Decimal("61088.4525")
-    max_close_price = Decimal("108716.7375")
-    min_close_price = Decimal("62123.85")
-    commission_rate = Decimal("0.0002")
+    #
+    max_open_price = 102504.3525
+    min_open_price = 61088.4525
+    max_close_price = 108716.7375
+    min_close_price = 62123.85
     open_array_length = 401
     close_array_length = 501
+    commission_rate = 0.0002
     direction = 'long'
     data = MyOrderArrayTriple(max_open_price=max_open_price, min_open_price=min_open_price,
                               max_close_price=max_close_price, min_close_price=min_close_price,
@@ -587,14 +572,14 @@ def test_my_order_array_consistency():
 def test_my_order_array_consistency2():
     # 一致性测试
     #
-    max_open_price = Decimal("102504.3525")
-    min_open_price = Decimal("61088.4525")
-    max_close_price = Decimal("108716.7375")
-    min_close_price = Decimal("62123.85")
-    commission_rate = Decimal("0.0002")
-    open_array_length = 401
-    close_array_length = 501
+    max_open_price = 102504.3525
+    min_open_price = 61088.4525
+    max_close_price = 108716.7375
+    min_close_price = 62123.85
+    open_array_length = 400
+    close_array_length = 500
     direction = 'long'
+    commission_rate = 0.0002
     data = MyOrderArrayTriple(max_open_price=max_open_price, min_open_price=min_open_price,
                               max_close_price=max_close_price, min_close_price=min_close_price,
                               open_array_length=open_array_length, close_array_length=close_array_length,
@@ -613,8 +598,37 @@ def test_my_order_array_consistency2():
             logging.info(f"ERROR-price not consistent: price2={price2}, price3={price3}")
 
 
+def test_my_order_array_consistency3():
+    # 一致性测试
+    #
+    max_open_price = 102504.3525
+    min_open_price = 61088.4525
+    max_close_price = 108716.7375
+    min_close_price = 62123.85
+    open_array_length = 400
+    close_array_length = 500
+    direction = 'long'
+    commission_rate = 0.0002
+    data = MyOrderArrayTriple(max_open_price=max_open_price, min_open_price=min_open_price,
+                              max_close_price=max_close_price, min_close_price=min_close_price,
+                              open_array_length=open_array_length, close_array_length=close_array_length,
+                              direction=direction, commission_rate=commission_rate)
+    for position in range(380,400):
+        price1 = data.close_order_array.get_price_by_position(position)
+        position2 = data.close_order_array.get_position_by_price(price1)
+        price2 = data.close_order_array.get_price_by_position(position2)
+        position3 = data.close_order_array.get_position_by_price(price2)
+        price3 = data.close_order_array.get_price_by_position(position3)
+        logging.info(
+            f"position={position}\tprice1={price1}\tposition2={position2}\tprice2={price2}\tposition3={position3}\tprice3={price3}")
+        if position2 != position3:
+            logging.info(f"ERROR-position not consistent: position2={position2}, position3={position3}")
+        if price2 != price3:
+            logging.info(f"ERROR-price not consistent: price2={price2}, price3={price3}")
+
+
 if __name__ == '__main__':
     # test_order_array3()
     # test_my_order_pair()
     # test_my_order_array_triple()
-    test_my_order_array_consistency2()
+    test_my_order_array_consistency3()
