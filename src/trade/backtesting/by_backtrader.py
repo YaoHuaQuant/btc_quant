@@ -1,4 +1,4 @@
-import logging
+from decimal import Decimal
 
 from strategy import StrategyInterface
 from datetime import datetime
@@ -17,14 +17,14 @@ BALANCE = 1000000
 # 杠杆倍率
 LEVERAGE = 1.0
 # 数据区间
-FROM_DATE = datetime(2024, 12, 1, 0, 0)
-TO_DATE = datetime(2024, 12, 2, 0, 0)
+FROM_DATE = datetime(2024, 12, 5, 4, 0)
+TO_DATE = datetime(2024, 12, 6, 4, 0)
 
 
 class BacktraderStrategy(bt.Strategy):
     def __init__(self, strategy: StrategyInterface):
         self.strategy = strategy
-        self.strategy.commission_rate = self.broker.getcommissioninfo(self.data).p.commission
+        self.strategy.commission_rate = Decimal(str(self.broker.getcommissioninfo(self.data).p.commission))
         self.strategy.super_strategy = self
 
     def next(self):

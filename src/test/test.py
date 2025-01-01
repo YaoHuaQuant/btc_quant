@@ -1,8 +1,7 @@
-def test():
-    end = 10
-    for i in range(end, 0, -1):
-        print(i)
+from decimal import Decimal
 
+# 创建 Decimal 对象
+num = Decimal("123.456789")
 
-if __name__ == '__main__':
-    test()
+# 直接打印
+print(num)  # 输出：123.456789

@@ -3,6 +3,8 @@
 深度左侧交易
 """
 import math
+from decimal import Decimal
+
 import backtrader as bt
 
 from log import *
@@ -15,15 +17,17 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
     只做多策略
     """
     # 定义参数
-    CASH_SLOT_NUM = 500  # 资产分割粒度
+    CASH_SLOT_NUM = 1000  # 资产分割粒度
     OPEN_PRICE_SLOT_NUM = 400  # 开仓挂单价位粒度
-    # PERCENTAGE_MAX_OPEN_PRICE = 0.90  # 开仓最高价格（顶部的90%）
-    PERCENTAGE_MAX_OPEN_PRICE = 1  # 开仓最高价格（顶部的90%）
-    PERCENTAGE_MIN_OPEN_PRICE = 0.50  # 开仓最低价格（顶部的50%）
-    # PERCENTAGE_MAX_CLOSE_PRICE = 0.95  # 平仓最高价格（顶部的95%）
-    PERCENTAGE_MAX_CLOSE_PRICE = 1.05  # 平仓最高价格（顶部的95%）
-    PERCENTAGE_MIN_CLOSE_PRICE = 0.50  # 平仓最低价格（顶部的50%）
-    PERCENTAGE_MINIMUM_PROFIT = 0.002  # 最低利润百分比
+    # PERCENTAGE_MAX_OPEN_PRICE = Decimal("0.90")  # 开仓最高价格（顶部的90%）
+    PERCENTAGE_MAX_OPEN_PRICE = Decimal("0.99")  # 开仓最高价格（顶部的90%）
+    # PERCENTAGE_MIN_OPEN_PRICE = Decimal("0.50")  # 开仓最低价格（顶部的50%）
+    PERCENTAGE_MIN_OPEN_PRICE = Decimal("0.59")  # 开仓最低价格（顶部的50%）
+    # PERCENTAGE_MAX_CLOSE_PRICE = Decimal("0.95")  # 平仓最高价格（顶部的95%）
+    PERCENTAGE_MAX_CLOSE_PRICE = Decimal("1.05")  # 平仓最高价格（顶部的95%）
+    # PERCENTAGE_MIN_CLOSE_PRICE = Decimal("0.50")  # 平仓最低价格（顶部的50%）
+    PERCENTAGE_MIN_CLOSE_PRICE = Decimal("0.60")  # 平仓最低价格（顶部的50%）
+    PERCENTAGE_MINIMUM_PROFIT = Decimal("0.002")  # 最低利润百分比
     OPENING_ORDER_NUM = 20  # 盘口附近的开单数量
     CLOSING_ORDER_NUM = 20  # 盘口附近的平单数量
 
@@ -65,7 +69,7 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
         logging.info(self)
         self.update_param()
 
-        ####
+        #### debug 输出当前挂单
         # open_orders = self.super_strategy.broker.get_orders_open()
         # if open_orders:
         #     print(f"Number of open orders: {len(open_orders)}")
@@ -74,30 +78,68 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
         ####
 
         # 获取当前的收盘价
-        current_price = self.get_price()
+        current_price = Decimal(str(self.get_price()))
 
+        self.debug_log()
         # 向下挂满开单
         ## 在 open order array 上挂满开单
+        start_open_price = current_price
         open_order_array = self.data.open_order_array
-        open_position = open_order_array.get_position_by_price(current_price)
-        open_price = open_order_array.get_price_by_position(open_position)
-        tmp_order = None
-        while tmp_order is None:
-            tmp_order = self.data.add_open_order(open_price=open_price, close_price=open_price,
-                                                 quantity=self.bet_cash_size/current_price)
-        ## 在盘口价下方挂上一定数量的开单
-        for i in range(open_position, open_position + self.OPENING_ORDER_NUM):
-            open_order = open_order_array.get_order_by_position(i)
-            open_price = open_order.open_price
-            open_quantity = open_order.quantity
-            if not self.open_order_price_dict.__contains__(open_price):
-                ## 创建限价单
-                new_open_order = self.super_strategy.buy(
-                    price=open_price,
-                    size=open_quantity,
-                    exectype=bt.Order.Limit
-                )
-                self.open_order_price_dict[open_price] = new_open_order
+        open_position = open_order_array.get_position_by_price(start_open_price)
+        if 0 <= open_position <= self.OPEN_PRICE_SLOT_NUM:
+            open_price = open_order_array.get_price_by_position(open_position)
+            for i in range(self.OPENING_ORDER_NUM):
+                self.data.add_open_order(open_price=open_price, close_price=open_price,
+                                         quantity=self.bet_cash_size / start_open_price)
+            ## 在盘口价下方挂上一定数量的开单
+            for i in range(open_position, min(open_position + self.OPENING_ORDER_NUM, self.OPEN_PRICE_SLOT_NUM)):
+                open_order = open_order_array.get_order_by_position(i)
+                open_price = open_order.open_price
+                open_quantity = open_order.quantity
+                if not self.open_order_price_dict.__contains__(open_price):
+                    ## 创建限价单
+                    new_open_order = self.super_strategy.buy(
+                        price=float(open_price),
+                        size=float(open_quantity),
+                        exectype=bt.Order.Limit
+                    )
+                    self.open_order_price_dict[open_price] = new_open_order
+        self.debug_log()
+
+    def debug_log(self):
+        #### debug 输出当前挂单
+        ##### 买单列表
+        buy_order_price_list = []
+        for price in self.open_order_price_dict.keys():
+            buy_order_price_list.append(price)
+        buy_order_price_list.sort(reverse=True)
+        logging.info(f"买单列表: {buy_order_price_list}")
+
+        ##### 卖单列表
+        sell_order_price_list = []
+        for order in self.close_order_price_list:
+            sell_order_price_list.append(order.price)
+        sell_order_price_list.sort()
+        logging.info(f"卖单列表: {sell_order_price_list}")
+
+        ##### data买单列表
+        data_buy_order_price_list = []
+        for o in self.data.open_order_array.data:
+            if o is None:
+                data_buy_order_price_list.append(None)
+            else:
+                data_buy_order_price_list.append(o.open_price)
+        logging.info(f"data买单列表: {data_buy_order_price_list}")
+
+        ##### data卖单列表
+        data_sell_order_price_list = []
+        for o in self.data.close_order_array.data:
+            if o is None:
+                data_sell_order_price_list.append(None)
+            else:
+                data_sell_order_price_list.append(o.close_price)
+        logging.info(f"data卖单列表: {data_sell_order_price_list}")
+        ####
 
     def notify_order(self, order: bt.Order):
         if order.isbuy():
@@ -124,9 +166,9 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
                 tmp_order = open_order_array.pop(open_order_position)
                 tmp_order.update_status_closing()
                 if self.direction == 'long':
-                    close_price = open_price * (1 + self.PERCENTAGE_MAX_OPEN_PRICE)
+                    close_price = open_price * (1 + self.PERCENTAGE_MINIMUM_PROFIT)
                 else:
-                    close_price = open_price * (1 - self.PERCENTAGE_MAX_OPEN_PRICE)
+                    close_price = open_price * (1 - self.PERCENTAGE_MINIMUM_PROFIT)
                 tmp_order.update_close_price(close_price)
                 close_order_array.add_order(order=tmp_order)
                 ## 在盘口价上方挂上一定数量的平单
@@ -136,15 +178,15 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
                 ### 添加新挂单
                 current_price = self.get_price()
                 close_position = close_order_array.get_position_by_price(current_price)
-                for i in range(close_position, close_position + self.CLOSING_ORDER_NUM):
+                for i in range(close_position, min(close_position + self.CLOSING_ORDER_NUM, self.CLOSE_PRICE_SLOT_NUM)):
                     close_order = close_order_array.get_order_by_position(i)
                     if close_order is not None:
                         close_price = close_order.close_price
                         close_quantity = close_order.quantity
                         ## 创建限价单
                         new_close_order = self.super_strategy.sell(
-                            price=close_price,
-                            size=close_quantity,
+                            price=float(close_price),
+                            size=float(close_quantity),
                             exectype=bt.Order.Limit
                         )
                         self.close_order_price_list.append(new_close_order)
@@ -175,13 +217,13 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
         默认当前价格大于self.top时，没有任何close order
         :return:
         """
-        price = self.get_price()
+        price = Decimal(str(self.get_price()))
         if self.top is None or self.top < price:
             # 更新参数
             self.top = price
-            self.bottom = price * 0.5
+            self.bottom = price * Decimal("0.5")
 
-            self.bet_cash_size = self.get_cash() / self.CASH_SLOT_NUM  # 下单金额
+            self.bet_cash_size = Decimal(str(self.get_cash())) / self.CASH_SLOT_NUM  # 下单金额
 
             self.max_open_price = self.top * self.PERCENTAGE_MAX_OPEN_PRICE  # 开仓最高价格
             self.min_open_price = self.top * self.PERCENTAGE_MIN_OPEN_PRICE  # 开仓最低价格
@@ -193,8 +235,8 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
 
             self.CLOSE_PRICE_SLOT_NUM = math.floor(
                 (self.max_close_price - self.min_close_price)
-                * (self.max_open_price - self.min_open_price)
-                / self.OPEN_PRICE_SLOT_NUM
+                * self.OPEN_PRICE_SLOT_NUM
+                / (self.max_open_price - self.min_open_price)
             )
             # 重构数据结构
             direction = 'long'
