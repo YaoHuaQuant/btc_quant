@@ -1,6 +1,4 @@
-import math
-
-import backtrader as bt
+from typing import List, Callable
 from log import *
 
 
@@ -11,7 +9,7 @@ class MyOrderPair:
     """
 
     def __init__(self, open_price: float, close_price: float, quantity: float,
-                 commission_rate: float = 0.0002):
+                 commission_rate: float = 0.0002, observer: Callable[[float, float, float], None] | None = None):
         """
         先有开仓单，然后才有MyOrderPair对象。
         属性：
@@ -24,10 +22,10 @@ class MyOrderPair:
         6.actual_gross_value  实际毛利润
         7.expected_commission 期望佣金值
         8.actual_commission 实际佣金值
-        9.present_order 关联backtrader.order
         :param open_price: 开仓价格
         :param quantity:  挂单量
         :param commission_rate: 佣金率
+        :param observer: 观察者 参数[open_price, close_price, quantity]
         """
         self.check_price(open_price)
         self.check_price(close_price)
@@ -46,7 +44,7 @@ class MyOrderPair:
         self.update_open_price(open_price)
         self.update_close_price(close_price)
 
-        self.present_order: None | bt.order = None
+        self.observer = observer
 
     def update_status_closing(self):
         """
@@ -85,6 +83,7 @@ class MyOrderPair:
             self.open_price = price
             self.expected_commission = (self.open_price + self.close_price) * self.commission_rate * self.quantity
             self.expected_gross_value = (self.close_price - self.open_price) * self.quantity
+            self.notify_observer()
 
     def update_close_price(self, price: float):
         """
@@ -104,6 +103,12 @@ class MyOrderPair:
                 """
                 self.expected_commission = self.actual_commission + self.close_price * self.commission_rate * self.quantity
                 self.expected_gross_value = (self.close_price - self.open_price) * self.quantity
+            self.notify_observer()
+
+    def update_quantity(self, quantity: float):
+        self.check_quantity(quantity)
+        self.quantity = quantity
+        self.notify_observer()
 
     def actual_net_value(self) -> float | None:
         if self.status != 'closed':
@@ -111,8 +116,12 @@ class MyOrderPair:
         else:
             return self.actual_gross_value - self.actual_commission
 
-    def link_order(self, order: bt.Order):
-        self.present_order = order
+    def link_observer(self, observer: Callable[[float, float, float], None] | None):
+        self.observer = observer
+
+    def notify_observer(self):
+        if self.observer is not None:
+            self.observer(self.open_price, self.close_price, self.quantity)
 
     @staticmethod
     def check_price(price: float):
@@ -121,7 +130,7 @@ class MyOrderPair:
 
     @staticmethod
     def check_quantity(quantity: float):
-        if quantity <= 0:
+        if quantity < 0:
             raise ValueError(f'quantity must be positive, not "{quantity}"')
 
     @staticmethod
@@ -207,7 +216,23 @@ class MyOrderArray:
         self.data[position] = None
         return order
 
-    def add_order(self, order: MyOrderPair, position: int | None = None) -> MyOrderPair | None:
+    def pop_by_price(self, price: float) -> MyOrderPair | None:
+        position = self.get_position_by_price(price)
+        return self.pop(position)
+
+    def add_order(self, order: MyOrderPair, position: int | None = None) -> (
+            bool, List[MyOrderPair], MyOrderPair | None):
+        """
+        向data中插入一个order
+        如果position不符合预期 则会插入失败
+        :param order:
+        :param position:
+        :return: (is_success, changed_list, pop_order)
+        若插入order成功，则返回：
+        1.is_success: 是否插入成功
+        2.changed_list: 包含所有发生移位的order
+        3.pop_order: 被弹出的order
+        """
         if position is None:
             if self.order_type == 'open':
                 position = self.get_position_by_price(order.open_price)
@@ -218,11 +243,11 @@ class MyOrderArray:
                 price = self.get_price_by_position(position)
                 order.update_close_price(price)
         if self.check_position(position):
-            result = self.bubble(position)
+            (changed_list, pop_order) = self.bubble(position)
             self.data[position] = order
+            return True, changed_list, pop_order
         else:
-            result = False
-        return result
+            return False, [], None
 
     def get_order_by_position(self, position: int) -> MyOrderPair | None:
         return self.data[position]
@@ -289,7 +314,7 @@ class MyOrderArray:
         #     if price < self.min_close_price or price > self.max_close_price:
         #         raise ValueError(f'price must between {self.min_close_price} and {self.max_close_price}, not "{price}"')
 
-    def bubble(self, start: int) -> MyOrderPair | None:
+    def bubble(self, start: int) -> (List[MyOrderPair], MyOrderPair | None):
         """
         对订单进行冒泡操作
         从start位置开始(包括start)，向后找一个None值的位置作为end
@@ -297,13 +322,17 @@ class MyOrderArray:
         若无法右移，则返回最右的一个元素，并将其他元素右移
         若能右移 则返回None
         所有产生右移的订单 需要调整价格
+        :return (changed_list, pop_order)
+        changed_list: 包含所有发生移位的order
+        pop_order: 被弹出的order
         """
         end = self.length - 1
         for i in range(start, self.length):
             if self.data[i] is None:
                 end = i
                 break
-        result: MyOrderPair | None = self.pop(end)
+        pop_order: MyOrderPair | None = self.pop(end)
+        changed_list: List[MyOrderPair] = []
         for i in range(end - 1, start - 1, -1):
             new_data: MyOrderPair | None = self.data[i]
             if type(new_data) is MyOrderPair:
@@ -315,7 +344,8 @@ class MyOrderArray:
                     raise ValueError(f'order_type must be "open" or "close", not "{self.order_type}"')
             self.data[i + 1] = new_data
             self.data[i] = None
-        return result
+            changed_list.append(new_data)
+        return (changed_list, pop_order)
 
     def __repr__(self):
         return f"OrderArray({self.data})"
@@ -546,7 +576,7 @@ def test_my_order_array_triple():
     logging.info(f"data={data}")
 
 
-def test_my_order_array_consistency():
+def test_my_order_array_consistency1():
     # 一致性测试
     #
     max_open_price = 102504.3525
@@ -613,7 +643,7 @@ def test_my_order_array_consistency3():
                               max_close_price=max_close_price, min_close_price=min_close_price,
                               open_array_length=open_array_length, close_array_length=close_array_length,
                               direction=direction, commission_rate=commission_rate)
-    for position in range(380,400):
+    for position in range(380, 400):
         price1 = data.close_order_array.get_price_by_position(position)
         position2 = data.close_order_array.get_position_by_price(price1)
         price2 = data.close_order_array.get_price_by_position(position2)
@@ -627,8 +657,37 @@ def test_my_order_array_consistency3():
             logging.info(f"ERROR-price not consistent: price2={price2}, price3={price3}")
 
 
+def test_my_order_array_consistency4():
+    # 一致性测试
+    #
+    max_open_price = 102504.3525
+    min_open_price = 61088.4525
+    max_close_price = 108716.7375
+    min_close_price = 62123.85
+    open_array_length = 400
+    close_array_length = 500
+    direction = 'long'
+    commission_rate = 0.0002
+    data = MyOrderArrayTriple(max_open_price=max_open_price, min_open_price=min_open_price,
+                              max_close_price=max_close_price, min_close_price=min_close_price,
+                              open_array_length=open_array_length, close_array_length=close_array_length,
+                              direction=direction, commission_rate=commission_rate)
+    for price in [101986.65375, 102090.1935, 102193.73324999999, 102297.273, 102400.81275, 102504.35250000001]:
+        # position = data.open_order_array.get_position_by_price(price)
+        order = MyOrderPair(open_price=price, close_price=price, quantity=1)
+        data.close_order_array.add_order(order)
+        get_order = data.close_order_array.get_order_by_price(price)
+        # get_price = get_order.open_price
+        logging.info(
+            f"price={price}\tget_order={get_order}")
+        # if position2 != position3:
+        #     logging.info(f"ERROR-position not consistent: position2={position2}, position3={position3}")
+        # if price2 != price3:
+        #     logging.info(f"ERROR-price not consistent: price2={price2}, price3={price3}")
+
+
 if __name__ == '__main__':
     # test_order_array3()
     # test_my_order_pair()
     # test_my_order_array_triple()
-    test_my_order_array_consistency3()
+    test_my_order_array_consistency4()

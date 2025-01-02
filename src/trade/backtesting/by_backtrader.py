@@ -17,8 +17,8 @@ BALANCE = 1000000
 # 杠杆倍率
 LEVERAGE = 1.0
 # 数据区间
-FROM_DATE = datetime(2024, 12, 5, 4, 0)
-TO_DATE = datetime(2024, 12, 6, 4, 0)
+FROM_DATE = datetime(2024, 3, 10, 0, 0)
+TO_DATE = datetime(2024, 3, 20, 0, 0)
 
 
 class BacktraderStrategy(bt.Strategy):

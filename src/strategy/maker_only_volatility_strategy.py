@@ -3,11 +3,13 @@
 深度左侧交易
 """
 import math
+from typing import Dict
+
 import backtrader as bt
 
 from log import *
 from strategy import StrategyInterface
-from strategy.order import MyOrderArrayTriple, test_my_order_pair
+from strategy.order import MyOrderArrayTriple, MyOrderPair
 
 
 class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
@@ -52,9 +54,11 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
 
         self.data: None | MyOrderArrayTriple = None
 
-        self.open_order_price_dict = dict()  # 保存挂单的开单价格
-        self.close_order_list = []  # 保存挂单的平单
-        self.closed_order_list = []  # 保存已完成的订单
+        self.open_order_price_dict = dict()  # 保存挂单的开单价格 key为价格 value为order对象
+        self.close_order_price_dict = dict()  # 保存挂单的平单 key为价格 value为order对象
+        self.closed_order_list = []  # 保存已完成的订单 MyOrderPair类型 用于数据统计
+
+        self.strategy_adaptor = StrategyAdaptor()
 
     def next(self):
         """
@@ -70,21 +74,25 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
         # 获取当前的收盘价
         current_price = self.get_price()
 
-        self.debug_log()
+        # self.debug_log()
         # 向下挂满开单
-        ## 在 open order array 上挂满开单
         open_order_array = self.data.open_order_array
         open_position = open_order_array.get_position_by_price(current_price)
         if 0 <= open_position <= self.OPEN_PRICE_SLOT_NUM:
+            ## 在 open order array 上挂满开单
             open_price = open_order_array.get_price_by_position(open_position)
             for i in range(self.OPENING_ORDER_NUM):
-                self.data.add_open_order(open_price=open_price, close_price=open_price,
-                                         quantity=self.bet_cash_size / current_price)
+                self.data.add_open_order(
+                    open_price=open_price,
+                    close_price=open_price,
+                    quantity=0 # quantity在正式挂单时决定
+                )
             ## 在盘口价下方挂上一定数量的开单
             for i in range(open_position, min(open_position + self.OPENING_ORDER_NUM, self.OPEN_PRICE_SLOT_NUM)):
                 open_order = open_order_array.get_order_by_position(i)
                 open_price = open_order.open_price
-                open_quantity = open_order.quantity
+                open_quantity = self.bet_cash_size / open_price
+                open_order.update_quantity(open_quantity)
                 if not self.open_order_price_dict.__contains__(open_price):
                     ## 创建限价单
                     new_open_order = self.super_strategy.buy(
@@ -92,6 +100,8 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
                         size=open_quantity,
                         exectype=bt.Order.Limit
                     )
+                    # logging.info(f"Order Placed\tDirection: Buy,\tPrice: {new_open_order.price},\tSize: {new_open_order.size}")
+                    # self.strategy_adaptor.bind(open_order, MyOrderPairObserver(strategy=self.super_strategy, bt_order=new_open_order))  # 将new_open_order委托给strategy_adaptor， 自动完成价格调整
                     self.open_order_price_dict[open_price] = new_open_order
         self.debug_log()
 
@@ -111,39 +121,39 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
             logging.info(f"order_num:{order_num}, buy_order_num:{buy_order_num}, sell_order_num:{sell_order_num}")
         ####
 
-        #### debug 输出当前挂单
-        ##### 买单列表
-        buy_order_price_list = []
-        for price in self.open_order_price_dict.keys():
-            buy_order_price_list.append(price)
-        buy_order_price_list.sort(reverse=True)
-        logging.info(f"买单列表: {buy_order_price_list}")
-
-        ##### 卖单列表
-        sell_order_price_list = []
-        for order in self.close_order_list:
-            sell_order_price_list.append(order.price)
-        sell_order_price_list.sort()
-        logging.info(f"卖单列表: {sell_order_price_list}")
-
-        ##### data买单列表
-        data_buy_order_price_list = []
-        for o in self.data.open_order_array.data:
-            if o is None:
-                data_buy_order_price_list.append(None)
-            else:
-                data_buy_order_price_list.append(o.open_price)
-        logging.info(f"data买单列表: {data_buy_order_price_list}")
-
-        ##### data卖单列表
-        data_sell_order_price_list = []
-        for o in self.data.close_order_array.data:
-            if o is None:
-                data_sell_order_price_list.append(None)
-            else:
-                data_sell_order_price_list.append(o.close_price)
-        logging.info(f"data卖单列表: {data_sell_order_price_list}")
-        ####
+        # #### debug 输出当前挂单
+        # ##### 买单列表
+        # buy_order_price_list = []
+        # for price in self.open_order_price_dict.keys():
+        #     buy_order_price_list.append(price)
+        # buy_order_price_list.sort(reverse=True)
+        # logging.info(f"买单列表: {buy_order_price_list}")
+        #
+        # ##### 卖单列表
+        # sell_order_price_list = []
+        # for order in self.close_order_price_dict.values():
+        #     sell_order_price_list.append(order.price)
+        # sell_order_price_list.sort()
+        # logging.info(f"卖单列表: {sell_order_price_list}")
+        #
+        # ##### data买单列表
+        # data_buy_order_price_list = []
+        # for o in self.data.open_order_array.data:
+        #     if o is None:
+        #         data_buy_order_price_list.append(None)
+        #     else:
+        #         data_buy_order_price_list.append(o.open_price)
+        # logging.info(f"data买单列表: {data_buy_order_price_list}")
+        #
+        # ##### data卖单列表
+        # data_sell_order_price_list = []
+        # for o in self.data.close_order_array.data:
+        #     if o is None:
+        #         data_sell_order_price_list.append(None)
+        #     else:
+        #         data_sell_order_price_list.append(o.close_price)
+        # logging.info(f"data卖单列表: {data_sell_order_price_list}")
+        # ####
 
     def notify_order(self, order: bt.Order):
         if order.isbuy():
@@ -154,8 +164,8 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
             # 如果订单已经提交或已接受，则跳过
             return
         if order.status in [order.Completed]:
-            logging.info(
-                f"Order executed: Direction: {direction},\tPrice: {order.executed.price},\tSize: {order.executed.size}")
+            # logging.info(f"Order executed: Direction: {direction},\tPrice: {order.price},\tSize: {order.size}")
+            # self.debug_log()
             # 如果订单已完成
             if order.isbuy():
                 # 开单完成 挂上平单
@@ -166,53 +176,75 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
                 ## 调整self.data
                 open_order_array = self.data.open_order_array
                 close_order_array = self.data.close_order_array
-                open_order_position = open_order_array.get_position_by_price(open_price)
-                tmp_order = open_order_array.pop(open_order_position)
+                tmp_order = open_order_array.pop_by_price(open_price)
                 tmp_order.update_status_closing()
                 if self.direction == 'long':
                     close_price = open_price * (1 + self.PERCENTAGE_MINIMUM_PROFIT)
                 else:
                     close_price = open_price * (1 - self.PERCENTAGE_MINIMUM_PROFIT)
                 tmp_order.update_close_price(close_price)
-                pop_order = close_order_array.add_order(order=tmp_order)
+                (is_success, changed_list, pop_order) = close_order_array.add_order(order=tmp_order)
+                ### todo add order过程中如果有订单价格发生改变 需要调整已经挂好的订单
                 ### todo 如果close挂满 直接将顶部pop出来的close订单 用市价成交
 
-                ## 在盘口价上方挂上一定数量的平单
-                ### 清除旧挂单
-                for o in self.close_order_list:
-                    self.super_strategy.cancel(o)
-                self.close_order_list = []
-                ### 添加新挂单
-                current_price = self.get_price()
-                close_position = close_order_array.get_position_by_price(current_price)
-                for i in range(close_position, min(close_position + self.CLOSING_ORDER_NUM, self.CLOSE_PRICE_SLOT_NUM)):
-                    close_order = close_order_array.get_order_by_position(i)
-                    if close_order is not None:
-                        close_price = close_order.close_price
-                        close_quantity = close_order.quantity
-                        ## 创建限价单
-                        new_close_order = self.super_strategy.sell(
-                            price=close_price,
-                            size=close_quantity,
-                            exectype=bt.Order.Limit
-                        )
-                        self.close_order_list.append(new_close_order)
+                new_close_order = self.super_strategy.sell(
+                    price=close_price,
+                    size=tmp_order.quantity,
+                    exectype=bt.Order.Limit
+                )
+                # logging.info(f"Order Placed\tDirection: Sell,\tPrice: {new_close_order.price},\tSize: {new_close_order.size}")
+                # self.strategy_adaptor.bind(tmp_order, MyOrderPairObserver(strategy=self.super_strategy, bt_order=new_close_order))  # 将new_close_order委托给strategy_adaptor， 自动完成价格调整
+
+                # ## 在盘口价上方挂上一定数量的平单
+                # ### 清除旧挂单
+                # for o in self.close_order_price_dict.values():
+                #     self.super_strategy.cancel(o)
+                # self.close_order_price_dict = dict()
+                # ### 添加新挂单
+                # current_price = self.get_price()
+                # close_position = close_order_array.get_position_by_price(current_price)
+                # for i in range(close_position, min(close_position + self.CLOSING_ORDER_NUM, self.CLOSE_PRICE_SLOT_NUM)):
+                #     close_order = close_order_array.get_order_by_position(i)
+                #     if close_order is not None:
+                #         idx = i + 1
+                #         close_price = close_order.close_price
+                #         close_quantity = close_order.quantity
+                #         while self.close_order_price_dict.__contains__(close_price):
+                #             if idx >= close_order_array.length:
+                #                 # 创建市价单 直接卖
+                #                 self.super_strategy.sell(
+                #                     price=close_price,
+                #                     size=close_quantity,
+                #                 )
+                #                 break
+                #             close_price = self.data.close_order_array.get_price_by_position(idx)
+                #             idx+=1
+                #         ## 创建限价单
+                #         new_close_order = self.super_strategy.sell(
+                #             price=close_price,
+                #             size=close_quantity,
+                #             exectype=bt.Order.Limit
+                #         )
+                #         # logging.info(f"Order Placed\tDirection: Sell,\tPrice: {new_close_order.price},\tSize: {new_close_order.size}")
+                #         # self.strategy_adaptor.bind(close_order, MyOrderPairObserver(strategy=self.super_strategy, bt_order=new_close_order))  # 将new_close_order委托给strategy_adaptor， 自动完成价格调整
+                #         self.close_order_price_dict[close_price] = new_close_order
             elif order.issell():
-                # 平单完成 保存订单
+                # todo 平单完成 保存订单
+                pass
                 ## 调整self.data
-                close_price = order.price
-                close_order_array = self.data.close_order_array
-                close_order_position = close_order_array.get_position_by_price(close_price)
-                tmp_order = close_order_array.pop(close_order_position)
-                tmp_order.update_status_closed()
-                ## 保存订单
-                self.closed_order_list.append(tmp_order)
-        elif order.status in [order.Canceled]:
-            logging.info(f"Order Canceled\tDirection: {direction}")
-        elif order.status in [order.Margin]:
-            logging.info(f"Order 保证金不足\tDirection: {direction}")
-        elif order.status in [order.Rejected]:
-            logging.info(f"Order Rejected\tDirection: {direction}")
+                # close_price = order.price
+                # if close_price is not None:
+                #     close_order_array = self.data.close_order_array
+                #     tmp_order = close_order_array.pop_by_price(close_price)
+                #     tmp_order.update_status_closed()
+                #     ## 保存订单
+                #     self.closed_order_list.append(tmp_order)
+        # elif order.status in [order.Canceled]:
+        #     logging.info(f"Order Canceled\tDirection: {direction},\tPrice: {order.price},\tSize: {order.size}")
+        # elif order.status in [order.Margin]:
+        #     logging.info(f"Order 保证金不足\tDirection: {direction},\tPrice: {order.price},\tSize: {order.size}")
+        # elif order.status in [order.Rejected]:
+        #     logging.info(f"Order Rejected\tDirection: {direction},\tPrice: {order.price},\tSize: {order.size}")
 
     def __repr__(self):
         return f"{self.super_strategy.data.datetime.date()} {self.super_strategy.data.datetime.time()}\tBTC价格:{self.get_price()}\t现金余额:{self.get_cash()}\t持仓BTC数量:{self.get_position_size()}\t持仓市值:{self.get_holding_value()}\t总资产:{self.get_total_value()}"
@@ -273,6 +305,81 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
     def get_position_size(self):
         """当前持仓币量"""
         return self.super_strategy.position.size
+
+
+class MyOrderPairObserver:
+    """
+    观察者对象
+    观察MyOrderPair
+    持有bt.Order
+    """
+    def __init__(self, strategy: bt, bt_order: bt.Order):
+        self.strategy = strategy
+        self.bt_order = bt_order
+
+    def update(self, open_price: float, close_price: float, quantity: float):
+        """当被观察对象发生变化时调用"""
+        self.check_value(open_price)
+        self.check_value(close_price)
+        self.check_value(quantity)
+        # 检查参数与当前挂单是否相同
+        # 如果参数发生变化 则取消原挂单 新建挂单
+        is_buy = self.bt_order.isbuy()
+        direction = 'Buy' if is_buy else 'Sell'
+        if is_buy:
+            order_price = open_price
+        else:
+            order_price = close_price
+        if self.bt_order.price != order_price or self.bt_order.size != quantity:
+            # logging.info(f"MyOrderPair changed. Direction:{direction}\tprice:{self.bt_order.price}=>{open_price}\tquantity:{self.bt_order.size}=>{quantity}")
+            # 取消原挂单
+            self.strategy.cancel(self.bt_order)
+            # 新建挂单
+            if is_buy:
+                self.bt_order = self.strategy.buy(
+                        price=order_price,
+                        size=quantity,
+                        exectype=bt.Order.Limit
+                )
+                # logging.info(f"Order Placed\tDirection: Buy,\tPrice: {self.bt_order.price},\tSize: {self.bt_order.size}")
+            else:
+                self.bt_order = self.strategy.sell(
+                        price=order_price,
+                        size=quantity,
+                        exectype=bt.Order.Limit
+                )
+                # logging.info(f"Order Placed\tDirection: Sell,\tPrice: {self.bt_order.price},\tSize: {self.bt_order.size}")
+
+    def check_value(self, value: float):
+        if value < 0:
+            raise ValueError(f'value must be >= 0, not {value}')
+
+class StrategyAdaptor:
+    """
+    策略转接器，用于对接MyOrderArrayTriple数据结构和backtrader模块
+    使用观察者模式 作为双向绑定管理器（BindingManager）
+    作用：
+    1.将MyOrderPair与backtrader.Order（存储在MyOrderPairObserver中）进行关联
+    2.接受MyOrderPair的notify信号，并修改backtrader.Order的价格
+    3.接受backtrader.Order的变更信号 并修改MyOrderPair的状态
+    """
+    def __init__(self):
+        # 正向绑定
+        self.bindings: Dict[MyOrderPair, MyOrderPairObserver] = {}
+        # 反向绑定
+        self.bindings_reverse: Dict[MyOrderPair, MyOrderPairObserver] = {}
+
+    def bind(self, observable: MyOrderPair, observer: MyOrderPairObserver):
+        observable.link_observer(observer.update)
+        self.bindings[observable] = observer
+
+    def update_status_closing(self, observer: MyOrderPairObserver):
+        # todo
+        pass
+
+    def update_status_closed(self, observer: MyOrderPairObserver):
+        # todo
+        pass
 
 
 def test_strategy():
