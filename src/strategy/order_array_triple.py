@@ -2,14 +2,16 @@ from typing import List, Callable
 from log import *
 
 
-class MyOrderPair:
+class VirtualOrder:
     """
-    订单Pair
-    包含一个open order和一个close order
+    虚拟订单
     """
 
-    def __init__(self, open_price: float, close_price: float, quantity: float,
-                 commission_rate: float = 0.0002, observer: Callable[[float, float, float], None] | None = None):
+    def __init__(
+            self, open_price: float, close_price: float, quantity: float, direction: str,
+            commission_rate: float = 0.0002, observer: Callable[[any], None] | None = None,
+            actual_order_hash: any = None
+    ):
         """
         先有开仓单，然后才有MyOrderPair对象。
         属性：
@@ -25,15 +27,18 @@ class MyOrderPair:
         :param open_price: 开仓价格
         :param quantity:  挂单量
         :param commission_rate: 佣金率
-        :param observer: 观察者 参数[open_price, close_price, quantity]
+        :param observer: 观察者 参数[self]
+        :param actual_order_hash: 实际订单的hash
         """
         self.check_price(open_price)
         self.check_price(close_price)
         self.check_quantity(quantity)
+        self.check_direction(direction)
 
         self.open_price = open_price
         self.close_price = close_price
         self.quantity = quantity
+        self.direction = direction
         self.status = 'opening'
         self.expected_gross_value = (close_price - open_price) * quantity
         self.actual_gross_value = None
@@ -45,6 +50,7 @@ class MyOrderPair:
         self.update_close_price(close_price)
 
         self.observer = observer
+        self.actual_order_hash = actual_order_hash
 
     def update_status_closing(self):
         """
@@ -116,12 +122,34 @@ class MyOrderPair:
         else:
             return self.actual_gross_value - self.actual_commission
 
-    def link_observer(self, observer: Callable[[float, float, float], None] | None):
+    def link_observer(self, observer: Callable[[any], None] | None):
+        """
+        链接观察者方法
+        :param observer: 观察者方法
+        :return:
+        """
         self.observer = observer
 
     def notify_observer(self):
         if self.observer is not None:
-            self.observer(self.open_price, self.close_price, self.quantity)
+            self.observer(self)
+
+    def link_actual_order_hash(self, actual_order_hash: any):
+        self.actual_order_hash = actual_order_hash
+
+    def is_buy(self) -> bool:
+        if self.status == 'opening':
+            if self.direction == 'long':
+                return True
+            else:
+                return False
+        elif self.status == 'closing':
+            if self.direction == 'short':
+                return False
+            else:
+                return True
+        else:
+            raise ValueError(f'is_buy can not be updated while in statue:"{self.status}"')
 
     @staticmethod
     def check_price(price: float):
@@ -134,6 +162,11 @@ class MyOrderPair:
             raise ValueError(f'quantity must be positive, not "{quantity}"')
 
     @staticmethod
+    def check_direction(direction: str):
+        if direction not in ['long', 'short']:
+            raise ValueError(f'direction must be "long" or "short", not "{direction}"')
+
+    @staticmethod
     def check_status(status: str):
         if status not in ['opening', 'closing', 'closed']:
             raise ValueError(f'status must be "opening" or "closing" or "closed", not "{status}"')
@@ -142,13 +175,13 @@ class MyOrderPair:
         return f"MyOrderPair({self.status},{self.open_price},{self.close_price},{self.quantity},{self.expected_commission},{self.actual_commission},{self.expected_gross_value},{self.actual_gross_value},{self.actual_net_value()})"
 
 
-class MyOrderArray:
+class VirtualOrderArray:
     """
-    订单簿数组
+    虚拟订单簿
     使用定长list存储挂单数据
     可以实现订单冒泡操作
-    self.data是一个list，存储None或者MyOrderPair：
-    数组的每个下标表示订单的价格，None表示该价格不存在挂单，MyOrderPair表示该价格存在一个挂单
+    self.data是一个list，存储None或者VirtualOrder：
+    数组的每个下标表示订单的价格，None表示该价格不存在挂单，VirtualOrder表示该价格存在一个挂单
     """
 
     def __init__(self, max_open_price: float, min_open_price: float, max_close_price: float, min_close_price: float,
@@ -193,6 +226,7 @@ class MyOrderArray:
             raise ValueError(f'direction must be "long" or "short", not "{direction}"')
         self.direction = direction
 
+        # 调整价格区间 保证各个MIN MAX值均在数组区间内
         if order_type == 'open':
             if direction == 'long':
                 # 做多开仓 将开仓最低价下移
@@ -208,26 +242,26 @@ class MyOrderArray:
                 # 做空平仓 将平仓最低价下移
                 self.min_close_price -= (max_close_price - min_close_price) / length
 
-    def get(self, position: int) -> MyOrderPair | None:
+    def get(self, position: int) -> VirtualOrder | None:
         return self.data[position]
 
-    def pop(self, position: int) -> MyOrderPair | None:
+    def pop(self, position: int) -> VirtualOrder | None:
         order = self.get(position)
         self.data[position] = None
         return order
 
-    def pop_by_price(self, price: float) -> MyOrderPair | None:
+    def pop_by_price(self, price: float) -> VirtualOrder | None:
         position = self.get_position_by_price(price)
         return self.pop(position)
 
-    def add_order(self, order: MyOrderPair, position: int | None = None) -> (
-            bool, List[MyOrderPair], MyOrderPair | None):
+    def add_order(self, order: VirtualOrder, position: int | None = None) -> (
+            bool, List[VirtualOrder], VirtualOrder | None):
         """
         向data中插入一个order
         如果position不符合预期 则会插入失败
         :param order:
         :param position:
-        :return: (is_success, changed_list, pop_order)
+        :return: todo (is_success, changed_list, pop_order)
         若插入order成功，则返回：
         1.is_success: 是否插入成功
         2.changed_list: 包含所有发生移位的order
@@ -249,7 +283,7 @@ class MyOrderArray:
         else:
             return False, [], None
 
-    def get_order_by_position(self, position: int) -> MyOrderPair | None:
+    def get_order_by_position(self, position: int) -> VirtualOrder | None:
         return self.data[position]
 
     def get_position_by_price(self, price: float) -> int:
@@ -274,7 +308,7 @@ class MyOrderArray:
                     (self.max_close_price - price) * self.length / (self.max_close_price - self.min_close_price))
         return position
 
-    def get_order_by_price(self, price: float) -> MyOrderPair | None:
+    def get_order_by_price(self, price: float) -> VirtualOrder | None:
         position = self.get_position_by_price(price)
         return self.get_order_by_position(position)
 
@@ -314,7 +348,7 @@ class MyOrderArray:
         #     if price < self.min_close_price or price > self.max_close_price:
         #         raise ValueError(f'price must between {self.min_close_price} and {self.max_close_price}, not "{price}"')
 
-    def bubble(self, start: int) -> (List[MyOrderPair], MyOrderPair | None):
+    def bubble(self, start: int) -> (List[VirtualOrder], VirtualOrder | None):
         """
         对订单进行冒泡操作
         从start位置开始(包括start)，向后找一个None值的位置作为end
@@ -331,11 +365,11 @@ class MyOrderArray:
             if self.data[i] is None:
                 end = i
                 break
-        pop_order: MyOrderPair | None = self.pop(end)
-        changed_list: List[MyOrderPair] = []
+        pop_order: VirtualOrder | None = self.pop(end)
+        changed_list: List[VirtualOrder] = []
         for i in range(end - 1, start - 1, -1):
-            new_data: MyOrderPair | None = self.data[i]
-            if type(new_data) is MyOrderPair:
+            new_data: VirtualOrder | None = self.data[i]
+            if type(new_data) is VirtualOrder:
                 if self.order_type == 'open':
                     new_data.update_open_price(self.get_price_by_position(i + 1))
                 elif self.order_type == 'close':
@@ -357,7 +391,7 @@ class MyOrderArrayTriple:
     包含：
     1.open OrderArray
     2.close OrderArray
-    3.closed OrderArray
+    3.closed List[VirtualOrder]
     """
 
     def __init__(self, max_open_price: float, min_open_price: float, max_close_price: float, min_close_price: float,
@@ -393,7 +427,7 @@ class MyOrderArrayTriple:
         self.open_array_length = open_array_length
         self.close_array_length = close_array_length
 
-        self.open_order_array = MyOrderArray(
+        self.open_order_array = VirtualOrderArray(
             length=open_array_length,
             max_open_price=max_open_price,
             min_open_price=min_open_price,
@@ -402,7 +436,7 @@ class MyOrderArrayTriple:
             order_type='open',
             direction=direction
         )
-        self.close_order_array = MyOrderArray(
+        self.close_order_array = VirtualOrderArray(
             length=close_array_length,
             max_open_price=max_open_price,
             min_open_price=min_open_price,
@@ -413,31 +447,31 @@ class MyOrderArrayTriple:
         )
         self.closed_order_array = []
 
-    def add_open_order(self, open_price: float, close_price: float, quantity: int) -> MyOrderPair | None:
-        order = MyOrderPair(open_price, close_price, quantity, commission_rate=self.commission_rate)
+    def add_open_order(self, open_price: float, close_price: float, quantity: int) -> VirtualOrder | None:
+        order = VirtualOrder(open_price, close_price, quantity, direction=self.direction, commission_rate=self.commission_rate)
         return self.add_open_order_object(order)
 
-    def add_open_order_object(self, order: MyOrderPair) -> MyOrderPair | None:
+    def add_open_order_object(self, order: VirtualOrder) -> VirtualOrder | None:
         return self.open_order_array.add_order(order)
 
-    def get_open_order(self, open_price: float) -> MyOrderPair:
+    def get_open_order(self, open_price: float) -> VirtualOrder:
         order = self.open_order_array.get_order_by_price(open_price)
         if order is None:
             raise ValueError(f'can not find close order with open_price-"{open_price}"')
         return order
 
-    def add_close_order_object(self, order: MyOrderPair) -> MyOrderPair | None:
+    def add_close_order_object(self, order: VirtualOrder) -> VirtualOrder | None:
         return self.close_order_array.add_order(order)
 
-    def get_close_order(self, close_price: float) -> MyOrderPair:
+    def get_close_order(self, close_price: float) -> VirtualOrder:
         order = self.close_order_array.get_order_by_price(close_price)
         if order is None:
             raise ValueError(f'can not find close order with open_price-"{close_price}"')
         return order
 
-    def open_order_complete(self, open_price: float) -> MyOrderPair | None:
+    def open_order_complete(self, open_price: float) -> VirtualOrder | None:
+        order = self.open_order_array.pop_by_price(open_price)
         position = self.open_order_array.get_position_by_price(open_price)
-        order = self.open_order_array.pop(position)
         if order is None:
             raise ValueError(f'can not find open order with open_price-"{open_price}" and position-"{position}"')
         order.update_status_closing()
@@ -445,8 +479,8 @@ class MyOrderArrayTriple:
         return new_order
 
     def close_order_complete(self, close_price: float):
+        order = self.close_order_array.pop_by_price(close_price)
         position = self.close_order_array.get_position_by_price(close_price)
-        order = self.close_order_array.pop(position)
         if order is None:
             raise ValueError(f'can not find close order with close_price-"{close_price}" and position-"{position}"')
         order.update_status_closed()
@@ -469,61 +503,63 @@ class MyOrderArrayTriple:
 def test_order_array1():
     # 使用自定义的定长数组类
 
-    arr = MyOrderArray(
+    arr = VirtualOrderArray(
         length=10, max_open_price=11, min_open_price=1, max_close_price=21, min_close_price=11, order_type='open',
         direction='short'
     )
+    direction = 'long'
     print(arr)
-    result = arr.add_order(order=MyOrderPair(open_price=3, close_price=10, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=3, close_price=10, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
-    result = arr.add_order(order=MyOrderPair(open_price=3, close_price=10, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=3, close_price=10, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
-    result = arr.add_order(order=MyOrderPair(open_price=6, close_price=10, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=6, close_price=10, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
-    result = arr.add_order(order=MyOrderPair(open_price=6, close_price=10, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=6, close_price=10, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
-    result = arr.add_order(order=MyOrderPair(open_price=6, close_price=10, quantity=10))
-    print(f"result={result}, arr={arr}")
-
-    result = arr.add_order(order=MyOrderPair(open_price=2, close_price=10, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=6, close_price=10, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
 
-    result = arr.add_order(order=MyOrderPair(open_price=2, close_price=10, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=2, close_price=10, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
 
-    result = arr.add_order(order=MyOrderPair(open_price=2, close_price=10, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=2, close_price=10, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
 
-    result = arr.add_order(order=MyOrderPair(open_price=2, close_price=10, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=2, close_price=10, quantity=10, direction=direction))
+    print(f"result={result}, arr={arr}")
+
+    result = arr.add_order(order=VirtualOrder(open_price=2, close_price=10, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
 
 
 def test_order_array2():
     # 使用自定义的定长数组类
 
-    arr = MyOrderArray(
+    arr = VirtualOrderArray(
         length=5, max_open_price=11, min_open_price=1, max_close_price=21, min_close_price=11, order_type='close',
         direction='short'
     )
+    direction = 'long'
     print(arr)
-    result = arr.add_order(order=MyOrderPair(open_price=7, close_price=17, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=7, close_price=17, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
-    result = arr.add_order(order=MyOrderPair(open_price=7, close_price=17, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=7, close_price=17, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
-    result = arr.add_order(order=MyOrderPair(open_price=7, close_price=17, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=7, close_price=17, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
-    result = arr.add_order(order=MyOrderPair(open_price=7, close_price=17, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=7, close_price=17, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
-    result = arr.add_order(order=MyOrderPair(open_price=7, close_price=17, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=7, close_price=17, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
-    result = arr.add_order(order=MyOrderPair(open_price=7, close_price=17, quantity=10))
+    result = arr.add_order(order=VirtualOrder(open_price=7, close_price=17, quantity=10, direction=direction))
     print(f"result={result}, arr={arr}")
 
 
 def test_order_array3():
     # 使用自定义的定长数组类
 
-    arr = MyOrderArray(
+    arr = VirtualOrderArray(
         length=5, max_open_price=11, min_open_price=1, max_close_price=11, min_close_price=1, order_type='open',
         direction='short'
     )
@@ -539,7 +575,7 @@ def test_order_array3():
 
 
 def test_my_order_pair():
-    order = MyOrderPair(open_price=1, close_price=2, quantity=10)
+    order = VirtualOrder(open_price=1, close_price=2, quantity=10)
     logging.info(f"order={order}")
     order.update_status_closing()
     logging.info(f"order={order}")
@@ -674,7 +710,7 @@ def test_my_order_array_consistency4():
                               direction=direction, commission_rate=commission_rate)
     for price in [101986.65375, 102090.1935, 102193.73324999999, 102297.273, 102400.81275, 102504.35250000001]:
         # position = data.open_order_array.get_position_by_price(price)
-        order = MyOrderPair(open_price=price, close_price=price, quantity=1)
+        order = VirtualOrder(open_price=price, close_price=price, quantity=1)
         data.close_order_array.add_order(order)
         get_order = data.close_order_array.get_order_by_price(price)
         # get_price = get_order.open_price

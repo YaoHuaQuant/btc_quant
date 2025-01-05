@@ -329,6 +329,9 @@ This strategy represents a sophisticated evolution of grid trading, optimized fo
         - [ ] 资金
 - 策略制定
     - [ ] only maker 做多波动率 中高频量化策略
+      - [ ] 虚拟订单
+      - [ ] 虚拟订单 -> 实际订单 映射
+        - [ ] 虚拟订单变化时 实际订单需要相应发生变化
 - 回测
     - 回测系统开发
         - [ ] 订单管理

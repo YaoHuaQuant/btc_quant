@@ -10,7 +10,7 @@ import backtrader as bt
 
 from log import *
 from strategy import StrategyInterface
-from strategy.order import MyOrderArrayTriple, MyOrderPair
+from strategy.order_array_triple import MyOrderArrayTriple, VirtualOrder
 
 
 class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
@@ -56,13 +56,14 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
         self.data: None | MyOrderArrayTriple = None
 
         self.open_order_price_dict = dict()  # 价格->bt.order映射，用于判断每个价位是否已有订单: key为价格 value为order对象
-        # self.open_order_dict = dict()  # bt.order->MyOrderPair对象映射，用于统计结果：key为bt.order对象 value为MyOrderPair对象
         self.close_order_price_dict = dict()  # 价格->bt.order映射，用于判断每个价位是否已有订单: key为价格 value为order对象
-        # self.close_order_dict = dict()  # bt.order->MyOrderPair对象映射，用于统计结果：key为bt.order对象 value为MyOrderPair对象
         self.price_map_close2open = dict()  # close价格->open价格映射，用于查找对应close价格的open成本价格
         self.closed_order_list = []  # 保存已完成的订单 MyOrderPair类型 用于数据统计
 
-        self.strategy_adaptor = StrategyAdaptor()
+        self.open_order_dict = dict()  # bt.order->MyOrderPair对象映射，用于统计结果：key为bt.order对象 value为MyOrderPair对象
+        self.close_order_dict = dict()  # bt.order->MyOrderPair对象映射，用于统计结果：key为bt.order对象 value为MyOrderPair对象
+
+        self.strategy_adaptor = OrderScheduler()
 
         # 分析数据
         ## 挂单数据
@@ -126,6 +127,7 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
                     )
                     # 用于数据统计
                     self.analysis_add_open_order(open_price=open_price, quantity=open_quantity)
+                    self.open_order_dict[new_open_order.ref] = open_order
                     # logging.info(f"Order Placed\tDirection: Buy,\tPrice: {new_open_order.price},\tSize: {new_open_order.size}")
                     # self.strategy_adaptor.bind(open_order, MyOrderPairObserver(strategy=self.super_strategy, bt_order=new_open_order))  # 将new_open_order委托给strategy_adaptor， 自动完成价格调整
                     self.open_order_price_dict[open_price] = new_open_order
@@ -357,7 +359,7 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
         open_price = self.price_map_close2open[close_price]
         if market_price is not None:
             close_price = market_price
-        order_pair = MyOrderPair(
+        order_pair = VirtualOrder(
             open_price=open_price, close_price=close_price,
             quantity=abs(quantity),
             commission_rate=self.commission_rate
@@ -528,9 +530,9 @@ class MyOrderPairObserver:
             raise ValueError(f'value must be >= 0, not {value}')
 
 
-class StrategyAdaptor:
+class OrderScheduler:
     """
-    策略转接器，用于对接MyOrderArrayTriple数据结构和backtrader模块
+    订单调度器，用于对接MyOrderArrayTriple数据结构和backtrader.Order
     使用观察者模式 作为双向绑定管理器（BindingManager）
     作用：
     1.将MyOrderPair与backtrader.Order（存储在MyOrderPairObserver中）进行关联
@@ -538,23 +540,82 @@ class StrategyAdaptor:
     3.接受backtrader.Order的变更信号 并修改MyOrderPair的状态
     """
 
-    def __init__(self):
+    def __init__(self, strategy:bt.Strategy):
         # 正向绑定
-        self.bindings: Dict[MyOrderPair, MyOrderPairObserver] = {}
+        self.order_bindings_virtual2actual: Dict[any, bt.Order] = {}
         # 反向绑定
-        self.bindings_reverse: Dict[MyOrderPair, MyOrderPairObserver] = {}
+        self.order_bindings_actual2virtual: Dict[any, VirtualOrder] = {}
+        # 由上级Strategy提供的backtrader.Strategy 用于操作backtrader.Order
+        self.strategy = strategy
 
-    def bind(self, observable: MyOrderPair, observer: MyOrderPairObserver):
-        observable.link_observer(observer.update)
-        self.bindings[observable] = observer
+    def bind(self, virtual_order: VirtualOrder, actual_order: bt.Order):
+        virtual_order.link_observer(self.virtual_observe)
+        self.order_bindings_virtual2actual[virtual_order] = actual_order
+        self.order_bindings_actual2virtual[id(actual_order)] = virtual_order
 
-    def update_status_closing(self, observer: MyOrderPairObserver):
+    def unbind(self, virtual_order: VirtualOrder):
+        virtual_order.link_observer(None)
+        if self.order_bindings_virtual2actual.__contains__(virtual_order):
+            actual_id = self.order_bindings_virtual2actual[virtual_order]
+            del self.order_bindings_virtual2actual[virtual_order]
+            if self.order_bindings_actual2virtual.__contains__(actual_id):
+                del self.order_bindings_actual2virtual[actual_id]
+
+    def virtual_observe(self, virtual_order: VirtualOrder):
+        """
+        当VirtualOrder发生变更时，触发该函数
+        :param virtual_order:
+        :return:
+        """
+        # 对比订单买卖方向 对比挂单价格 对比挂单量
+        # 如果数据存在差异 则取消旧挂单 提交新挂单
+        actual_order = self.order_bindings_virtual2actual.get(virtual_order)
+        # 如果virtual_order没有关联的actual_order 则抛出异常
+        if actual_order is None:
+            raise RuntimeError(f'virtual order {virtual_order} not found')
+        virtual_is_buy = virtual_order.is_buy()
+        actual_is_buy = actual_order.isbuy()
+        if actual_is_buy:
+            order_price = virtual_order.open_price
+        else:
+            order_price = virtual_order.close_price
+        quantity = virtual_order.quantity
+        if actual_order.price != order_price or actual_order.size != quantity or virtual_is_buy != actual_is_buy:
+            # logging.info(f"MyOrderPair changed. Direction:{'Buy' if actual_is_buy else 'Sell'}\tprice:{actual_order.price}=>{order_price}\tquantity:{actual_order.size}=>{quantity}")
+            # 取消原挂单
+            self.strategy.cancel(actual_order)
+            # 新建挂单
+            if virtual_is_buy:
+                new_actual_order = self.strategy.buy(
+                    price=order_price,
+                    size=quantity,
+                    exectype=bt.Order.Limit
+                )
+                # logging.info(f"Order Placed\tDirection: Buy,\tPrice: {self.bt_order.price},\tSize: {self.bt_order.size}")
+            else:
+                new_actual_order = self.strategy.sell(
+                    price=order_price,
+                    size=quantity,
+                    exectype=bt.Order.Limit
+                )
+                # logging.info(f"Order Placed\tDirection: Sell,\tPrice: {self.bt_order.price},\tSize: {self.bt_order.size}")
+            self.unbind(virtual_order)
+            self.bind(virtual_order, new_actual_order)
+
+    def actual_buy_finished(self, actual_order: bt.Order):
+        """
+        实际买单成交
+        修改VirtualOrder的状态
+        :param actual_order:
+        """
         # todo
         pass
 
-    def update_status_closed(self, observer: MyOrderPairObserver):
+    def actual_sell_finished(self, actual_order: bt.Order):
+        """实际卖单成交"""
         # todo
         pass
+
 
 
 def test_strategy():
