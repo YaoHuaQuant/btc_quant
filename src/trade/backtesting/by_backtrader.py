@@ -1,14 +1,11 @@
-from decimal import Decimal
-
 from strategy import StrategyInterface
 from datetime import datetime
 from data_collection.api.kline_btc_usdt_1m import KlineBTCUSDT1M
 from data_collection.dao.kline_btc_usdt_1m import from_list_KlineBtcUSDT1mDao_to_KlineBtcUSDT1mDaoSimple
-from log import *
 import backtrader as bt
 import pandas as pd
 
-from strategy.maker_only_volatility_strategy import MakerOnlyLongOnlyVolatilityStrategy
+from strategy.maker_only_volatility_strategy.my_strategy import MakerOnlyLongOnlyVolatilityStrategy
 
 # 0.02% 的交易手续费
 COMMISSION = 0.0002
@@ -17,15 +14,14 @@ BALANCE = 1000000
 # 杠杆倍率
 LEVERAGE = 1.0
 # 数据区间
-FROM_DATE = datetime(2024, 10, 29, 0, 0)
-TO_DATE = datetime(2024, 11, 7, 0, 0)
+FROM_DATE = datetime(2024, 12, 1, 0, 0)
+TO_DATE = datetime(2025, 1, 8, 0, 0)
 
 
 class BacktraderStrategy(bt.Strategy):
     def __init__(self, strategy: StrategyInterface):
+        strategy.init(self)
         self.strategy = strategy
-        self.strategy.commission_rate = self.broker.getcommissioninfo(self.data).p.commission
-        self.strategy.super_strategy = self
 
     def next(self):
         self.strategy.next()
