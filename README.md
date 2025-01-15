@@ -316,11 +316,18 @@ This strategy represents a sophisticated evolution of grid trading, optimized fo
 - 数据采集
     - 历史数据收集
         - [x] k线
+          - [x] btc现货
+          - [ ] eth现货
+          - [ ] btc币本位合约
+          - [ ] eth币本位合约
     - 实时数据采集
         - [x] k线
         - [ ] 订单
         - [ ] 资金
     - 数据采集统一接口输出
+    - 策略数据采集
+      - [ ] 策略决策
+      - [ ] 回测持仓状态
 - 数据存储
     - Clickhouse
         - [x] btc 1m k线 历史数据（回溯至2020.1.1）
@@ -382,3 +389,8 @@ This strategy represents a sophisticated evolution of grid trading, optimized fo
 - 实盘
     - [ ] 交易所订单API
     - [ ] 订单同步（防止实际挂单与策略预期的挂单不一致）
+- 数据可视化
+  - [ ] k线
+  - [ ] 量化操作明细
+  - [ ] 资金变化曲线
+  - [ ] 收益率曲线

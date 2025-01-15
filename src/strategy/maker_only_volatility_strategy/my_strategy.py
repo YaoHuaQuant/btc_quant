@@ -9,6 +9,9 @@ import math
 
 import backtrader as bt
 
+from data_collection.dao.strategy_action_btc_spot_trading_usdt_1m import StrategyActionBtcUSDT1mConnector
+from data_collection.dao.strategy_status_btc_spot_trading_usdt_1m import StrategyStatusBtcUSDT1mDao, \
+    StrategyStatusBtcUSDT1mConnector
 from log import *
 from strategy import StrategyInterface
 from strategy.maker_only_volatility_strategy.order_scheduler import OrderScheduler
@@ -66,27 +69,51 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
 
         self.CLOSE_PRICE_SLOT_NUM = None
 
-        # 分析数据
+        # 分析数据 db相关
+        # db相关
+        self.STRATEGY_VERSION = self.generate_random_version()
+        logging.info("Strategy Version: {}".format(self.STRATEGY_VERSION))
+        self.db_status_connector = StrategyStatusBtcUSDT1mConnector()
+        self.db_action_connector = StrategyActionBtcUSDT1mConnector()
+        ##
         self.closed_order_list = []  # 保存已完成的订单 MyOrderPair类型 用于数据统计
-        ## 挂单数据
-        self.opening_amount: float = 0  # 开仓挂单BTC总量
-        self.opening_value: float = 0  # 开仓挂单BTC总价
-        self.closing_amount: float = 0  # 平仓挂单BTC总量
-        self.closing_value: float = 0  # 平仓挂单BTC总价(期望持仓市值)
-        self.closing_cost: float = 0  # 平仓挂单BTC成本 = sum(每单BTC总量 * 每单开仓挂单价格)
+        ## 原子指标
+        ### opening
+        self.opening_order_num = 0  # 开仓挂单数
+        self.opening_order_quantity: float = 0  # 开仓挂单BTC总量
+        self.opening_order_value: float = 0  # 开仓挂单BTC总价
+        ### closing
+        self.closing_order_num: float = 0  # 平仓挂单数
+        self.closing_order_quantity: float = 0  # 平仓挂单BTC总量
+        self.closing_order_value: float = 0  # 平仓挂单BTC总价(期望持仓市值)
+        self.closing_order_cost: float = 0  # 平仓挂单BTC成本 = sum(每单BTC总量 * 每单开仓挂单价格)
         ## 成交数据
-        self.opening_amount_finished: float = 0  # 已成交的开仓挂单BTC总量
-        self.opening_value_finished: float = 0  # 已成交的开仓挂单BTC总价
-        self.closing_amount_finished: float = 0  # 已成交的平仓挂单BTC总量
-        self.closing_value_finished: float = 0  # 已成交的平仓挂单BTC总价
-        self.closing_cost_finished: float = 0  # 已成交的平仓挂单BTC成本 = sum(每单BTC总量 * 每单开仓挂单价格)
-        ## 期望数据
-        # self.expected_profit: float = 0  # 期望未成交收益 = 平仓挂单BTC总价 - 平仓挂单BTC成本
-        # self.expected_holding_value: float = 0  # 期望持仓市值 = 平仓挂单BTC总价
-        # self.expected_total_value: float = 0  # 期望总资产 = 现金余额 + 期望持仓市值（平仓挂单BTC总价）
-        # self.not_yet_achieved_profit: float = 0  # 尚未达到的收益 = 平仓挂单BTC总价 - 持仓市值
-        # self.actual_profit: float = 0  # 实际已成交收益 = 已成交的平仓挂单BTC总价 - 已成交的平仓挂单BTC成本
-        # self.market_sell_profit: float = 0 # 市价平仓收益 = sum((市价 - 每单开仓挂单价格) * 每单BTC总量）
+        ### opened
+        self.opened_order_num: float = 0  # 开仓成交单数
+        self.opened_order_quantity: float = 0  # 已成交的开仓挂单BTC总量
+        self.opened_order_value: float = 0  # 已成交的开仓挂单BTC总价
+        ### closed
+        self.closed_order_num: float = 0  # 平仓成交单数
+        self.closed_order_quantity: float = 0  # 已成交的平仓挂单BTC总量
+        self.closed_order_value: float = 0  # 已成交的平仓挂单BTC总价
+        self.closed_order_cost: float = 0  # 已成交的平仓挂单BTC成本 = sum(每单BTC总量 * 每单开仓挂单价格)
+        ### 累计数据
+        self.cumulative_opening_order_num: int = 0  # 累计开仓挂单数
+        self.cumulative_opening_order_quantity: float = 0  # 累计开仓挂单BTC总量
+        self.cumulative_opening_order_value: float = 0  # 累计开仓挂单总价 -- 开仓成本=开仓总价 因此不单独计算开仓成本
+        self.cumulative_closing_order_num: int = 0  # 累计平仓挂单数
+        self.cumulative_closing_order_quantity: float = 0  # 累计平仓挂单BTC总量
+        self.cumulative_closing_order_value: float = 0  # 累计平仓挂单总价
+        self.cumulative_closing_order_cost: float = 0  # 累计平仓挂单成本 = sum(每单成本(每单BTC总量 * 每单开仓挂单价格))
+        self.cumulative_opened_order_num: int = 0  # 累计开仓成交单数
+        self.cumulative_opened_order_quantity: float = 0  # 累计开仓成交BTC总量'
+        self.cumulative_opened_order_value: float = 0  # 累计开仓成交总价 -- 开仓成本=开仓总价 因此不单独计算开仓成本
+        self.cumulative_closed_order_num: int = 0  # 累计平仓成交单数（累计已成交订单数）
+        self.cumulative_closed_order_quantity: float = 0  # 累计平仓成交BTC总量
+        self.cumulative_closed_order_value: float = 0  # 累计平仓成交总价
+        self.cumulative_closed_order_cost: float = 0  # 累计平仓成交成本 = sum(每单成本(每单BTC总量 * 每单开仓挂单价格))',
+        ## 持仓数据
+        self.cumulative_closed_order_num: int = 0  # 累计已成交订单数
 
     def next(self):
         """
@@ -97,7 +124,9 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
         :return:
         """
         logging.info(self)
-        self.update_param()
+        self.upload_status()  # 状态数据落库
+        self.reset_incremental_status()  # 重置增量数据
+        self.update_param()  # 更新参数
 
         # 获取当前的收盘价
         current_price = self.get_price()
@@ -141,7 +170,7 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
                         exectype=bt.Order.Limit
                     )
                     # 用于数据统计
-                    self.analysis_add_open_order(open_price=open_price, quantity=open_quantity)
+                    self.analysis_opening_order(open_price=open_price, quantity=open_quantity)
                     # logging.info(f"Order Placed\tDirection: Buy,\tPrice: {new_open_order.price},\tSize: {new_open_order.size}")
 
                     # order_scheduler
@@ -180,10 +209,10 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
                 virtual_order = self.order_scheduler.actual_buy_finished(order)
 
                 ## 数据统计用 - START
-                self.analysis_remove_open_order(
+                self.analysis_opened_order(
                     open_price=virtual_order.open_price, close_price=virtual_order.close_price, quantity=order.size
                 )
-                self.analysis_add_close_order(
+                self.analysis_closing_order(
                     open_price=virtual_order.open_price, close_price=virtual_order.close_price, quantity=order.size
                 )
                 ## 数据统计用 - END
@@ -198,7 +227,7 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
 
                 ## 数据统计用 - START
                 if order.price is not None:
-                    self.analysis_remove_close_order(
+                    self.analysis_closed_order(
                         open_price=virtual_order.open_price, close_price=virtual_order.close_price, quantity=order.size
                     )
                     self.analysis_add_closed_order(
@@ -227,6 +256,7 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
         :return:
         """
         price = self.get_price()
+
         # 当价格创新高时更新参数
         if self.top is None or self.top < price:
             # 更新参数
@@ -278,49 +308,164 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
                 for order in open_orders:
                     self.super_strategy.cancel(order)
 
-    def analysis_add_open_order(self, open_price: float, quantity: float):
-        """用于分析"""
-        ## 挂单数据
-        self.opening_amount += abs(quantity)  # 开仓挂单BTC总量
-        self.opening_value += abs(quantity) * open_price  # 开仓挂单BTC总价
+    def upload_status(self):
+        open_time = bt.num2date(self.super_strategy.datetime[0])  # 开盘时间
+        version = self.STRATEGY_VERSION  # 策略版本
+        price = self.get_price()  # 市场价格
 
-    def analysis_remove_open_order(self, open_price: float, close_price: float, quantity: float):
+        opening_order_num = self.opening_order_num  # 开仓挂单数
+        opening_order_quantity = self.opening_order_quantity  # 开仓挂单BTC总量
+        opening_order_value = self.opening_order_value  # 开仓挂单总价；开仓成本=开仓总价 因此不单独计算开仓成本
+
+        closing_order_num = self.closing_order_num  # 平仓挂单数
+        closing_order_quantity = self.closing_order_quantity  # 平仓挂单BTC总量
+        closing_order_value = self.closing_order_value  # 平仓挂单总价
+        closing_order_cost = self.closing_order_cost  # 平仓挂单成本 = sum(每单成本(每单BTC总量 * 每单开仓挂单价格))
+
+        opened_order_num = self.opened_order_num  # 开仓成交单数
+        opened_order_quantity = self.opened_order_quantity  # 开仓成交BTC总量
+        opened_order_value = self.opened_order_value  # 开仓成交总价；开仓成本=开仓总价 因此不单独计算开仓成本
+
+        closed_order_num = self.closed_order_num  # 平仓成交单数
+        closed_order_quantity = self.closed_order_quantity  # 平仓成交BTC总量
+        closed_order_value = self.closed_order_value  # 平仓成交总价
+        closed_order_cost = self.closed_order_cost  # 平仓成交成本 = sum(每单成本(每单BTC总量 * 每单开仓挂单价格))
+
+        cumulative_opening_order_quantity = self.cumulative_opening_order_quantity  # 累计开仓挂单BTC总量
+        cumulative_opening_order_num = self.cumulative_opening_order_num  # 累计开仓挂单数
+        cumulative_opening_order_value = self.cumulative_opening_order_value  # 累计开仓挂单总价 -- 开仓成本=开仓总价 因此不单独计算开仓成本
+        cumulative_closing_order_num = self.cumulative_closing_order_num  # 累计平仓挂单数
+        cumulative_closing_order_quantity = self.cumulative_closing_order_quantity  # 累计平仓挂单BTC总量
+        cumulative_closing_order_value = self.cumulative_closing_order_value  # 累计平仓挂单总价
+        cumulative_closing_order_cost = self.cumulative_closing_order_cost  # 累计平仓挂单成本 = sum(每单成本(每单BTC总量 * 每单开仓挂单价格))
+        cumulative_opened_order_num = self.cumulative_opened_order_num  # 累计开仓成交单数
+        cumulative_opened_order_quantity = self.cumulative_opened_order_quantity  # 累计开仓成交BTC总量'
+        cumulative_opened_order_value = self.cumulative_opened_order_value  # 累计开仓成交总价 -- 开仓成本=开仓总价 因此不单独计算开仓成本
+        cumulative_closed_order_num = self.cumulative_closed_order_num  # 累计平仓成交单数（累计已成交订单数）
+        cumulative_closed_order_quantity = self.cumulative_closed_order_quantity  # 累计平仓成交BTC总量
+        cumulative_closed_order_value = self.cumulative_closed_order_value  # 累计平仓成交总价
+        cumulative_closed_order_cost = self.cumulative_closed_order_cost  # 累计平仓成交成本 = sum(每单成本(每单BTC总量 * 每单开仓挂单价格))',
+
+        cash = self.get_cash()  # 现金余额（包含本金和借贷资金）
+        loan = self.loan  # 借贷资金（欠款）
+        holding_quantity = self.get_hold_quantity()  # 实际持仓BTC总量
+        holding_value = self.get_holding_value()  # 实际持仓BTC总价
+        total_value = self.get_total_value()  # 实际总资产 = 现金 + 实际持仓BTC总价
+
+        expected_closing_profit = self.get_expected_closing_profit()  # 期望未成交收益 = 平仓挂单总价 - 平仓挂单成本
+        actual_closed_profit = self.get_actual_closed_profit()  # 实际已成交收益 =平仓成交总价 - 平仓成交成本
+        expected_market_close_profit = self.get_expected_market_close_profit()  # 市价平仓期望收益(亏损) = sum((市场价格 - 每单开仓挂单价格) * 每单BTC总量）
+        expected_closed_profit = self.get_expected_closed_profit()  # 期望总收益 = 实际已成交收益 + 期望未成交收益
+        expected_holding_value = self.get_expected_holding_value()  # 期望持仓市值 = 平仓挂单总价
+        expected_total_value = self.get_expected_total_value()  # 期望总资产 = 现金余额 + 期望持仓市值（平仓挂单BTC总价）
+        actual_net_value = self.get_actual_net_value()  # 实际净资产 = 总资产 - 借贷资金；若净资产归零 则强制平仓
+        expected_net_value = self.get_expected_net_value()  # 期望净资产 = 净资产 - 平仓挂单亏损
+
+        ave_profit_per_closed_order = self.get_ave_profit_per_closed_order()  # 已成交订单平均每单盈利
+        status = StrategyStatusBtcUSDT1mDao(
+            open_time, version, price, opening_order_num, opening_order_quantity, opening_order_value,
+            closing_order_num, closing_order_quantity, closing_order_value, closing_order_cost, opened_order_num,
+            opened_order_quantity, opened_order_value, closed_order_num, closed_order_quantity, closed_order_value,
+            closed_order_cost, cumulative_opening_order_num, cumulative_opening_order_quantity,
+            cumulative_opening_order_value, cumulative_closing_order_num, cumulative_closing_order_quantity,
+            cumulative_closing_order_value, cumulative_closing_order_cost, cumulative_opened_order_num,
+            cumulative_opened_order_quantity, cumulative_opened_order_value, cumulative_closed_order_num,
+            cumulative_closed_order_quantity, cumulative_closed_order_value, cumulative_closed_order_cost, cash, loan,
+            holding_quantity, holding_value, total_value, expected_closing_profit,
+            actual_closed_profit, expected_market_close_profit, expected_closed_profit, expected_holding_value,
+            expected_total_value, actual_net_value, expected_net_value, ave_profit_per_closed_order
+        )
+
+        self.db_status_connector.insert_single(status)
+
+    def reset_incremental_status(self):
+        self.opening_order_num = 0  # 开仓挂单数
+        self.opening_order_quantity = 0  # 开仓挂单BTC总量
+        self.opening_order_value = 0  # 开仓挂单总价；开仓成本=开仓总价 因此不单独计算开仓成本
+        self.closing_order_num = 0  # 平仓挂单数
+        self.closing_order_quantity = 0  # 平仓挂单BTC总量
+        self.closing_order_value = 0  # 平仓挂单总价
+        self.closing_order_cost = 0  # 平仓挂单成本 = sum(每单成本(每单BTC总量 * 每单开仓挂单价格))
+        self.opened_order_num = 0  # 开仓成交单数
+        self.opened_order_quantity = 0  # 开仓成交BTC总量
+        self.opened_order_value = 0  # 开仓成交总价；开仓成本=开仓总价 因此不单独计算开仓成本
+        self.closed_order_num = 0  # 平仓成交单数
+        self.closed_order_quantity = 0  # 平仓成交BTC总量
+        self.closed_order_value = 0  # 平仓成交总价
+        self.closed_order_cost = 0  # 平仓成交成本 = sum(每单成本(每单BTC总量 * 每单开仓挂单价格))
+
+    def analysis_opening_order(self, open_price: float, quantity: float):
+        """
+        用于分析
+        新增开单
+        """
+        ## 增量数据
+        self.opening_order_num += 1  # 开仓挂单数
+        self.opening_order_quantity += abs(quantity)  # 开仓挂单BTC总量
+        self.opening_order_value += abs(quantity) * open_price  # 开仓挂单BTC总价
+        ## 累计数据
+        self.cumulative_opening_order_num += 1  # 累计开仓挂单数
+        self.cumulative_opening_order_quantity += abs(quantity)  # 累计开仓挂单BTC总量
+        self.cumulative_opening_order_value += abs(quantity) * open_price  # 累计开仓挂单总价
+
+    def analysis_opened_order(self, open_price: float, close_price: float, quantity: float):
         """用于分析"""
-        ## 挂单数据
-        self.opening_amount -= abs(quantity)  # 开仓挂单BTC总量
-        self.opening_value -= abs(quantity) * open_price  # 开仓挂单BTC总价
+        # 增量数据
+        ## 减少开单
+        self.opening_order_num -= 1  # 开仓挂单数
+        self.opening_order_quantity -= abs(quantity)  # 开仓挂单BTC总量
+        self.opening_order_value -= abs(quantity) * open_price  # 开仓挂单BTC总价
+        ## 增加平单
+        self.opened_order_num += 1  # 平仓挂单数
+        self.opened_order_quantity += abs(quantity)  # 已成交的开仓挂单BTC总量
+        self.opened_order_value += abs(quantity) * open_price  # 已成交的开仓挂单BTC总价
+        # 累计数据
+        ## 增加平单
+        self.cumulative_opening_order_num -= 1  # 开仓挂单数
+        self.cumulative_opening_order_quantity -= abs(quantity)  # 开仓挂单BTC总量
+        self.cumulative_opening_order_value -= abs(quantity) * open_price  # 开仓挂单BTC总价
+        self.cumulative_closing_order_num += 1  # 平仓挂单数
+        self.cumulative_opened_order_quantity += abs(quantity)  # 已成交的开仓挂单BTC总量
+        self.cumulative_opened_order_value += abs(quantity) * open_price  # 已成交的开仓挂单BTC总价
+
+    def analysis_closing_order(self, open_price: float, close_price: float, quantity: float):
+        """用于分析"""
+        # 增量数据
+        self.closing_order_num += 1  # 平仓挂单数
+        self.closing_order_quantity += abs(quantity)  # 平仓挂单BTC总量
+        self.closing_order_value += abs(quantity) * close_price  # 平仓挂单BTC总价(期望持仓市值)
+        self.closing_order_cost += abs(quantity) * open_price  # 平仓挂单BTC成本 = sum(每单BTC总量 * 每单开仓挂单价格)
+        # 累计数据
+        self.cumulative_closing_order_num += 1  # 平仓挂单数
+        self.cumulative_closing_order_quantity += abs(quantity)  # 平仓挂单BTC总量
+        self.cumulative_closing_order_value += abs(quantity) * close_price  # 平仓挂单BTC总价(期望持仓市值)
+        self.cumulative_closing_order_cost += abs(quantity) * open_price  # 平仓挂单BTC成本 = sum(每单BTC总量 * 每单开仓挂单价格)
+
+    def analysis_closed_order(self, open_price: float, close_price: float, quantity: float, ):
+        """用于分析"""
+        # 增量数据
+        ## 减少平单
+        self.closing_order_num -= 1  # 平仓挂单数
+        self.closing_order_quantity -= abs(quantity)  # 平仓挂单BTC总量
+        self.closing_order_value -= abs(quantity) * close_price  # 平仓挂单BTC总价(期望持仓市值)
+        self.closing_order_cost -= abs(quantity) * open_price  # 平仓挂单BTC成本 = sum(每单BTC总量 * 每单开仓挂单价格)
         ## 成交数据
-        self.opening_amount_finished += abs(quantity)  # 已成交的开仓挂单BTC总量
-        self.opening_value_finished += abs(quantity) * open_price  # 已成交的开仓挂单BTC总价
+        self.closed_order_num += 1  # 平仓成交单数
+        self.closed_order_quantity += abs(quantity)  # 已成交的平仓挂单BTC总量
+        self.closed_order_value += abs(quantity) * close_price  # 已成交的平仓挂单BTC总价
+        self.closed_order_cost += abs(quantity) * open_price  # 已成交的平仓挂单BTC成本 = sum(每单BTC总量 * 每单开仓挂单价格)
+        # 累计数据
+        self.cumulative_closing_order_num -= 1  # 平仓挂单数
+        self.cumulative_closing_order_quantity -= abs(quantity)  # 平仓挂单BTC总量
+        self.cumulative_closing_order_value -= abs(quantity) * close_price  # 平仓挂单BTC总价(期望持仓市值)
+        self.cumulative_closing_order_cost -= abs(quantity) * open_price  # 平仓挂单BTC成本 = sum(每单BTC总量 * 每单开仓挂单价格)
+        self.cumulative_closed_order_num += 1  # 平仓成交单数
+        self.cumulative_closed_order_quantity += abs(quantity)  # 已成交的平仓挂单BTC总量
+        self.cumulative_closed_order_value += abs(quantity) * close_price  # 已成交的平仓挂单BTC总价
+        self.cumulative_closed_order_cost += abs(quantity) * open_price  # 已成交的平仓挂单BTC成本 = sum(每单BTC总量 * 每单开仓挂单价格)
 
-    def analysis_add_close_order(self, open_price: float, close_price: float, quantity: float):
+    def analysis_add_closed_order(self, open_price: float, close_price: float, quantity: float, ):
         """用于分析"""
-        ## 挂单数据
-        self.closing_amount += abs(quantity)  # 平仓挂单BTC总量
-        self.closing_value += abs(quantity) * close_price  # 平仓挂单BTC总价(期望持仓市值)
-        self.closing_cost += abs(quantity) * open_price  # 平仓挂单BTC成本 = sum(每单BTC总量 * 每单开仓挂单价格)
-
-    def analysis_remove_close_order(self, open_price: float, close_price: float, quantity: float,
-                                    market_price: float = None):
-        """用于分析"""
-        if market_price is not None:
-            close_price_finish = market_price
-        else:
-            close_price_finish = close_price
-        ## 挂单数据
-        self.closing_amount -= abs(quantity)  # 平仓挂单BTC总量
-        self.closing_value -= abs(quantity) * close_price  # 平仓挂单BTC总价(期望持仓市值)
-        self.closing_cost -= abs(quantity) * open_price  # 平仓挂单BTC成本 = sum(每单BTC总量 * 每单开仓挂单价格)
-        ## 成交数据
-        self.closing_amount_finished += abs(quantity)  # 已成交的平仓挂单BTC总量
-        self.closing_value_finished += abs(quantity) * close_price_finish  # 已成交的平仓挂单BTC总价
-        self.closing_cost_finished += abs(quantity) * open_price  # 已成交的平仓挂单BTC成本 = sum(每单BTC总量 * 每单开仓挂单价格)
-
-    def analysis_add_closed_order(self, open_price: float, close_price: float, quantity: float,
-                                  market_price: float = None):
-        """用于分析"""
-        if market_price is not None:
-            close_price = market_price
         virtual_order = VirtualOrderOne(
             open_price=open_price, close_price=close_price,
             quantity=abs(quantity),
@@ -346,19 +491,15 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
         cash = self.get_cash()  # 现金余额
         expected_holding_value = self.get_expected_holding_value()  # 期望持仓市值
         expected_total_value = self.get_expected_total_value()  # 期望总资产
-        expected_profit = self.get_expected_profit()  # 期望未成交收益
-        actual_profit = self.get_actual_profit()  # 实际已成交收益
-        market_close_profit = self.closing_amount * self.get_price() - self.closing_value  # 平仓挂单亏损：平仓挂单BTC量*BTC价格 - 平仓挂单BTC总价
-        closed_order_num = len(self.closed_order_list)  # 已成交订单数
-        net_value = self.get_total_value() - self.loan  # 净资产 = 总资产 - 借贷资金
-        expected_net_value = net_value - market_close_profit  # 期望净资产 = 净资产 - 平仓挂单亏损
-        if closed_order_num == 0:
-            ave_profit_per_order = 0
-        else:
-            ave_profit_per_order = actual_profit / closed_order_num  # 平均每单盈利
-
+        expected_closing_profit = self.get_expected_closing_profit()  # 期望未成交收益
+        actual_closed_profit = self.get_actual_closed_profit()  # 实际已成交收益
+        expected_market_close_profit = self.get_expected_market_close_profit()  # 平仓挂单亏损：平仓挂单BTC量*BTC价格 - 平仓挂单BTC总价
+        cumulative_closed_order_num = self.cumulative_closed_order_num  # 已成交订单数
+        actual_net_value = self.get_actual_net_value()  # 净资产 = 总资产 - 借贷资金
+        expected_net_value = self.get_expected_net_value()  # 期望净资产 = 净资产 - 平仓挂单亏损
+        ave_profit_per_order = self.get_ave_profit_per_closed_order()
         # 爆仓判断：净资产 <= 0
-        if net_value <= 0:
+        if actual_net_value <= 0:
             logging.error(
                 f"WARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\tWARNING 爆仓\t")
         ##
@@ -372,15 +513,15 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
         return (
                 f"{self.super_strategy.data.datetime.date()} {self.super_strategy.data.datetime.time()}\t" +
                 f"BTC价格:{self.get_price():.2f}\t" +
-                f"净资产:{net_value:.2f}\t期望净资产:{expected_net_value:.2f}\t"
-                f"现金余额:{cash:.2f}\t本金:{self.principal:.2f}\t持仓BTC数量:{self.get_position_size():.4f}\t" +
+                f"净资产:{actual_net_value:.2f}\t期望净资产:{expected_net_value:.2f}\t"
+                f"现金余额:{cash:.2f}\t本金:{self.principal:.2f}\t持仓BTC数量:{self.get_hold_quantity():.4f}\t" +
                 f"借贷资金:{self.loan:.2f}\t" +
                 f"期望总资产:{expected_total_value:.2f}\t总资产:{self.get_total_value():.2f}\t" +
                 f"期望持仓市值:{expected_holding_value:.2f}\t实际持仓市值:{self.get_holding_value():.2f}\t" +
-                f"期望未成交收益:{expected_profit:.2f}\t实际已成交收益:{actual_profit:.2f}\t" +
+                f"期望未成交收益:{expected_closing_profit:.2f}\t实际已成交收益:{actual_closed_profit:.2f}\t" +
                 # f"平仓挂单BTC总价:{self.closing_value:2f}\t平仓挂单BTC成本:{self.closing_cost:2f}\t" +
-                f"市价平仓亏损:{market_close_profit:.2f}\t" +
-                f"已成交订单数:{closed_order_num}\t平均每单盈利:{ave_profit_per_order:.5f}\t"
+                f"市价平仓亏损:{expected_market_close_profit:.2f}\t" +
+                f"已成交订单数:{cumulative_closed_order_num}\t平均每单盈利:{ave_profit_per_order:.5f}\t"
         )
 
     def init(self, super_strategy: bt.Strategy):
@@ -405,49 +546,92 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
         """获取当前持仓市值"""
         return self.get_total_value() - self.get_cash()
 
-    def get_position_size(self):
+    def get_hold_quantity(self):
         """当前持仓币量"""
         return self.super_strategy.position.size
 
-    def get_expected_profit(self) -> float:
+    def get_expected_closing_profit(self) -> float:
         """
         用于分析
-        期望未成交收益 = 平仓挂单BTC总价 - 平仓挂单BTC成本
+        期望未成交收益 = 累计平仓挂单BTC总价 - 累计平仓挂单BTC成本
         """
-        return self.closing_value - self.closing_cost
+        return self.cumulative_closing_order_value - self.cumulative_closing_order_cost
 
     def get_expected_holding_value(self) -> float:
         """
         用于分析
-        期望持仓市值 = 平仓挂单BTC总价
+        期望持仓市值 = 累计平仓挂单BTC总价
         """
-        return self.closing_value
+        return self.cumulative_closing_order_value
 
     def get_expected_total_value(self) -> float:
         """
         用于分析
-        期望总资产 = 现金余额 + 期望持仓市值（平仓挂单BTC总价）
+        期望总资产 = 现金余额 + 期望持仓市值（累计平仓挂单BTC总价）
         """
-        return self.get_cash() + self.closing_value
+        return self.get_cash() + self.cumulative_closing_order_value
 
     def get_not_yet_achieved_profit(self) -> float:
         """
         用于分析
-        尚未达到的收益 = 平仓挂单BTC总价 - 持仓市值
+        尚未达到的收益 = 累计平仓挂单BTC总价 - 持仓市值
         """
-        return self.closing_value - self.get_holding_value()
+        return self.cumulative_closing_order_value - self.get_holding_value()
 
-    def get_actual_profit(self) -> float:
+    def get_actual_closed_profit(self) -> float:
         """
         用于分析
-        实际已成交收益 = 已成交的平仓挂单BTC总价 - 已成交的平仓挂单BTC成本
+        实际已成交收益 = 累计已成交的平仓挂单BTC总价 - 累计已成交的平仓挂单BTC成本
         """
-        return self.closing_value_finished - self.closing_cost_finished
+        return self.cumulative_closed_order_value - self.cumulative_closed_order_cost
+
+    def get_expected_market_close_profit(self) -> float:
+        """
+        用于分析
+        平仓挂单亏损：累计平仓挂单BTC量*BTC价格 - 累计平仓挂单BTC总价
+        :return:
+        """
+        return self.cumulative_closing_order_quantity * self.get_price() - self.cumulative_closing_order_value
+
+    def get_actual_net_value(self) -> float:
+        """
+        用于分析
+        净资产 = 总资产 - 借贷资金
+        :return:
+        """
+        return self.get_total_value() - self.loan
+
+    def get_expected_closed_profit(self) -> float:
+        """
+        用于分析
+        期望总收益 = 实际已成交收益 + 期望未成交收益
+        :return:
+        """
+        return self.get_actual_closed_profit() + self.get_expected_closing_profit()
+
+    def get_ave_profit_per_closed_order(self) -> float:
+        """
+        用于分析
+        已成交订单平均每单盈利
+        :return:
+        """
+        if self.cumulative_closed_order_num == 0:
+            return 0
+        else:
+            return self.closed_order_value / self.cumulative_closed_order_num
+
+    def get_expected_net_value(self) -> float:
+        """
+        用于分析
+        期望净资产 = 净资产 - 平仓挂单亏损
+        :return:
+        """
+        return self.get_actual_net_value() - self.get_expected_market_close_profit()
 
 
 def test_strategy():
-    from trade.backtesting import by_backtrader
-    by_backtrader.test()
+    from trade.backtesting import by_backtrader_btc
+    by_backtrader_btc.test()
 
 
 if __name__ == '__main__':

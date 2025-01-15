@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SqlDialectMappings">
+    <file url="file://$PROJECT_DIR$/src/data_collection/ddl/kline_btc_usdt_1m.sql" dialect="ClickHouse" />
+    <file url="file://$PROJECT_DIR$/src/data_collection/ddl/kline_eth_usdt_1m.sql" dialect="ClickHouse" />
+    <file url="file://$PROJECT_DIR$/src/data_collection/ddl/strategy_action_btc_usdt_1m.sql" dialect="ClickHouse" />
+    <file url="file://$PROJECT_DIR$/src/data_collection/ddl/strategy_status_btc_usdt_1m.sql" dialect="ClickHouse" />
+  </component>
+</project>

@@ -1,6 +1,6 @@
 from data_collection.api import KlineInterface
 from datetime import datetime
-from data_collection.dao.kline_btc_usdt_1m import KlineBtcUSDT1mConnector, KlineBtcUSDT1mDao
+from data_collection.dao.kline_btc_spot_trading_usdt_1m import KlineBtcUSDT1mConnector, KlineBtcUSDT1mDao
 from log import *
 from typing import List
 

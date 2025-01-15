@@ -10,8 +10,19 @@ limit:返回值数量 最小500 最大1000
 '''
 
 
-def get_binance_klines(start_time: datetime, symbol='BTCUSDT', interval='1m', limit: int = 1000) -> pd.DataFrame:
-    url = 'https://api.binance.com/api/v3/klines'
+def get_binance_klines(
+        url: str, start_time: datetime, symbol='BTCUSDT', interval='1m',
+        limit: int = 1000
+) -> pd.DataFrame:
+    """
+    获取k线
+    :param url:
+    :param start_time:
+    :param symbol:
+    :param interval:
+    :param limit:
+    :return:
+    """
     params = {
         'symbol': symbol,
         'interval': interval,
@@ -36,3 +47,42 @@ def get_binance_klines(start_time: datetime, symbol='BTCUSDT', interval='1m', li
     return df[['Open Time', 'Open', 'High', 'Low', 'Close', 'Volume',
                'Close Time', 'Quote Asset Volume', 'Number of Trades',
                'Taker Buy Base Volume', 'Taker Buy Quote Volume']]
+
+
+def get_binance_spot_trading_klines(start_time: datetime, symbol='BTCUSDT', interval='1m',
+                                    limit: int = 1000) -> pd.DataFrame:
+    """
+    获取现货的k线
+    :param start_time:
+    :param symbol:
+    :param interval:
+    :param limit:
+    :return:
+    """
+    url = 'https://api.binance.com/api/v3/klines'
+    return get_binance_klines(url=url, start_time=start_time, symbol=symbol, interval=interval, limit=limit)
+
+
+def get_binance_spot_coin_margined_futures_klines(start_time: datetime, symbol='BTCUSD_PERP', interval='1m',
+                                                  limit: int = 1000) -> pd.DataFrame:
+    """
+    获取币本位合约的k线
+    :param start_time:
+    :param symbol:
+    :param interval:
+    :param limit:
+    :return:
+    """
+    url = 'https://dapi.binance.com/dapi/v1/klines'
+    return get_binance_klines(url=url, start_time=start_time, symbol=symbol, interval=interval, limit=limit)
+
+
+def test():
+    start_time = datetime(2024, 12, 1, 0, 0)
+    symbol = "BTCUSD_PERP"  # BTC币本位合约
+    result = get_binance_spot_coin_margined_futures_klines(start_time, symbol)
+    print(result)
+
+
+if __name__ == '__main__':
+    test()

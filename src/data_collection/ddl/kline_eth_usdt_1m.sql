@@ -1,5 +1,5 @@
--- btc现货价格
-CREATE TABLE kline_btc_usdt_1m
+-- eth现货价格
+CREATE TABLE kline_eth_usdt_1m
 (
     `open_time` DateTime,                -- 开盘时间
     `open_price` Float64,               -- 开盘价格

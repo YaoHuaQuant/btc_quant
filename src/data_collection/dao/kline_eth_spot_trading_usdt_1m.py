@@ -1,15 +1,15 @@
-import logging
+import time
 from collections import namedtuple
 from datetime import datetime
 from typing import List
+
 import pandas as pd
-import time
 
-from data_collection.api.binance_api import get_binance_klines
-from log import *
+from data_collection.api.binance_api import get_binance_spot_trading_klines
 from data_collection.db import db
+from log import *
 
-table_name = 'kline_btc_usdt_1m'
+table_name = 'kline_eth_usdt_1m'
 
 '''
 Binance kline接口 返回字段解析
@@ -76,8 +76,8 @@ Binance kline接口 返回字段解析
 解释：该字段在币安API中一般不使用，可以忽略。
 '''
 
-KlineBtcUSDT1mDao = namedtuple(
-    'KlineBtcUSDT1mDao',
+KlineEthUSDT1mDao = namedtuple(
+    'KlineEthUSDT1mDao',
     [
         'open_time', 'open_price', 'high_price', 'low_price', 'close_price', 'volume',
         'close_time', 'quote_asset_volume', 'num_of_trades',
@@ -85,40 +85,40 @@ KlineBtcUSDT1mDao = namedtuple(
     ]
 )
 
-KlineBtcUSDT1mDaoSimple = namedtuple(
-    'KlineBtcUSDT1mDao',
+KlineEthUSDT1mDaoSimple = namedtuple(
+    'KlineEthUSDT1mDao',
     [
         'datetime', 'open', 'high', 'low', 'close', 'volume'
     ]
 )
 
 
-def from_KlineBtcUSDT1mDao_to_KlineBtcUSDT1mDaoSimple(data: KlineBtcUSDT1mDao) -> KlineBtcUSDT1mDaoSimple:
-    return KlineBtcUSDT1mDaoSimple(data[0], data[1], data[2], data[3], data[4], data[5])
+def from_KlineEthUSDT1mDao_to_KlineEthUSDT1mDaoSimple(data: KlineEthUSDT1mDao) -> KlineEthUSDT1mDaoSimple:
+    return KlineEthUSDT1mDaoSimple(data[0], data[1], data[2], data[3], data[4], data[5])
 
 
-def from_list_KlineBtcUSDT1mDao_to_KlineBtcUSDT1mDaoSimple(data: List[KlineBtcUSDT1mDao]) -> List[
-    KlineBtcUSDT1mDaoSimple]:
+def from_list_KlineEthUSDT1mDao_to_KlineEthUSDT1mDaoSimple(data: List[KlineEthUSDT1mDao]) -> List[
+    KlineEthUSDT1mDaoSimple]:
     result = []
     for x in data:
-        result.append(from_KlineBtcUSDT1mDao_to_KlineBtcUSDT1mDaoSimple(x))
+        result.append(from_KlineEthUSDT1mDao_to_KlineEthUSDT1mDaoSimple(x))
     return result
 
 
-class KlineBtcUSDT1mConnector:
+class KlineEthUSDT1mConnector:
     def __init__(self):
         self.db_connection = db
 
-    def select(self, from_timestamp: datetime, to_timestamp: datetime, order: str = 'ASC') -> List[KlineBtcUSDT1mDao]:
+    def select(self, from_timestamp: datetime, to_timestamp: datetime, order: str = 'ASC') -> List[KlineEthUSDT1mDao]:
         if order != 'ASC' and order != 'DESC':
             raise ValueError('order is not ASC or DESC')
-        query = f"SELECT DISTINCT * FROM kline_btc_usdt_1m WHERE open_time BETWEEN %(from_timestamp)s AND %(to_timestamp)s ORDER BY open_time {order}"
+        query = f"SELECT DISTINCT * FROM kline_eth_usdt_1m WHERE open_time BETWEEN %(from_timestamp)s AND %(to_timestamp)s ORDER BY open_time {order}"
         params = {'from_timestamp': from_timestamp, 'to_timestamp': to_timestamp}
         result = self.db_connection.execute(query, params)
         return result
 
-    def insert_single(self, data: KlineBtcUSDT1mDao):
-        query = f"INSERT INTO kline_btc_usdt_1m (open_time, open_price, high_price, low_price, close_price, volume, \
+    def insert_single(self, data: KlineEthUSDT1mDao):
+        query = f"INSERT INTO kline_eth_usdt_1m (open_time, open_price, high_price, low_price, close_price, volume, \
             close_time, quote_asset_volume, num_of_trades,taker_buy_base_volume, taker_buy_quote_volume) \
             VALUES (%(open_time)s, %(open_price)s, %(high_price)s, %(low_price)s, %(close_price)s, %(volume)s, \
                 %(close_time)s, %(quote_asset_volume)s, %(num_of_trades)s, %(taker_buy_base_volume)s, %(taker_buy_quote_volume)s)"
@@ -136,22 +136,22 @@ class KlineBtcUSDT1mConnector:
             'taker_buy_quote_volume': data.taker_buy_quote_volume,
         }
         self.db_connection.execute(query, params)
-        # logging.info(f"Data insert into kline_btc_usdt_1m successfully.")
+        # logging.info(f"Data insert into kline_eth_usdt_1m successfully.")
 
-    def insert_many(self, data: List[KlineBtcUSDT1mDao]):
-        query = f"INSERT INTO kline_btc_usdt_1m (open_time, open_price, high_price, low_price, close_price, volume, close_time, quote_asset_volume, num_of_trades,taker_buy_base_volume, taker_buy_quote_volume) VALUES"
+    def insert_many(self, data: List[KlineEthUSDT1mDao]):
+        query = f"INSERT INTO kline_eth_usdt_1m (open_time, open_price, high_price, low_price, close_price, volume, close_time, quote_asset_volume, num_of_trades,taker_buy_base_volume, taker_buy_quote_volume) VALUES"
         # logging.info(f"sql:{query}")
         # logging.info(f"data:{data}")
         self.db_connection.execute(query, data)
         # logging.info(f"Data inserted into {table_name} successfully.")
 
     def last_date(self) -> datetime:
-        query = f"SELECT MAX(close_time) FROM kline_btc_usdt_1m"
+        query = f"SELECT MAX(close_time) FROM kline_eth_usdt_1m"
         result = self.db_connection.execute(query)
         return result[0][0]
 
     def save_dataframe_to_db(self, df: pd.DataFrame):
-        tuples = [KlineBtcUSDT1mDao(
+        tuples = [KlineEthUSDT1mDao(
             x[0], float(x[1]), float(x[2]), float(x[3]), float(x[4]), float(x[5]), x[6], float(x[7]), float(x[8]),
             float(x[9]), float(x[10]),
         ) for x in df.values]
@@ -162,29 +162,29 @@ class KlineBtcUSDT1mConnector:
             datetime,
             limit: int = 1000,
             sleep_pre_loop: int = 3,
-            rest_every_n_loop: int = 100,
+            rest_every_n_loop: int = 30,
             rest_sleep_time: int = 60
     ):
         index = 0
         date_timestamp = from_date
-        df = get_binance_klines(date_timestamp)
+        df = get_binance_spot_trading_klines(date_timestamp)
         self.save_dataframe_to_db(df)
         while len(df) == limit:
             logging.info("collection data from:" + str(date_timestamp))
             # logging.info("len(df):" + str(len(df)))
             date_timestamp = df["Close Time"].max()
-            df = get_binance_klines(date_timestamp, limit=limit)
+            df = get_binance_spot_trading_klines(date_timestamp, limit=limit)
             self.save_dataframe_to_db(df)
             index += 1
             time.sleep(sleep_pre_loop)
             if index > rest_every_n_loop:
                 time.sleep(rest_sleep_time)
                 index = 0
-        logging.info("history of kline_btc_usdt_1m is up2date")
+        logging.info("history of kline_eth_usdt_1m is up2date")
 
 
 def test_select():
-    connector = KlineBtcUSDT1mConnector()
+    connector = KlineEthUSDT1mConnector()
 
     from_timestamp = datetime(2020, 12, 1, 0, 0)
     to_timestamp = datetime(2020, 12, 2, 0, 0)
@@ -196,11 +196,11 @@ def test_select():
 
 
 def test_insert_many():
-    connector = KlineBtcUSDT1mConnector()
+    connector = KlineEthUSDT1mConnector()
 
     from_timestamp = datetime(2023, 12, 1, 0, 0)
     to_timestamp = datetime(2023, 12, 2, 0, 0)
-    data: List[KlineBtcUSDT1mDao] = connector.select(from_timestamp, to_timestamp)
+    data: List[KlineEthUSDT1mDao] = connector.select(from_timestamp, to_timestamp)
 
     # 输出查询结果
     for row in data:
@@ -210,14 +210,14 @@ def test_insert_many():
 
 
 def test_insert_single():
-    connector = KlineBtcUSDT1mConnector()
+    connector = KlineEthUSDT1mConnector()
 
-    data: KlineBtcUSDT1mDao = KlineBtcUSDT1mDao('2023-12-01 04:01:00', 1, 1, 1, 1, 1, '2023-12-01 04:02:00', 1, 1, 1, 1)
+    data: KlineEthUSDT1mDao = KlineEthUSDT1mDao('2023-12-01 04:01:00', 1, 1, 1, 1, 1, '2023-12-01 04:02:00', 1, 1, 1, 1)
     connector.insert_single(data)
 
     from_timestamp = datetime(2023, 12, 1, 0, 0)
     to_timestamp = datetime(2023, 12, 2, 0, 0)
-    data: List[KlineBtcUSDT1mDao] = connector.select(from_timestamp, to_timestamp)
+    data: List[KlineEthUSDT1mDao] = connector.select(from_timestamp, to_timestamp)
 
     # 输出查询结果
     for row in data:
@@ -225,7 +225,7 @@ def test_insert_single():
 
 
 def test_last_date():
-    connector = KlineBtcUSDT1mConnector()
+    connector = KlineEthUSDT1mConnector()
     last_date = connector.last_date()
     logging.info(last_date)
 

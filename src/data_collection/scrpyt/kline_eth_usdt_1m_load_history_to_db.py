@@ -1,10 +1,10 @@
-from data_collection.dao.kline_btc_spot_trading_usdt_1m import KlineBtcUSDT1mConnector
+from data_collection.dao.kline_eth_spot_trading_usdt_1m import KlineEthUSDT1mConnector
 from datetime import datetime
 from log import *
 
 
 def scrypt(first_date: datetime = datetime(2020, 1, 1, 0, 0)):
-    connection = KlineBtcUSDT1mConnector()
+    connection = KlineEthUSDT1mConnector()
     logging.info(f'first_date {first_date}')
     last_date = connection.last_date()
     logging.info(f'last_date {last_date}')

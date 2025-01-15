@@ -1,7 +1,7 @@
 from strategy import StrategyInterface
 from datetime import datetime
 from data_collection.api.kline_btc_usdt_1m import KlineBTCUSDT1M
-from data_collection.dao.kline_btc_usdt_1m import from_list_KlineBtcUSDT1mDao_to_KlineBtcUSDT1mDaoSimple
+from data_collection.dao.kline_btc_spot_trading_usdt_1m import from_list_KlineBtcUSDT1mDao_to_KlineBtcUSDT1mDaoSimple
 import backtrader as bt
 import pandas as pd
 
