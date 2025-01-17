@@ -9,11 +9,12 @@ import math
 
 import backtrader as bt
 
-from data_collection.dao.strategy_action_btc_spot_trading_usdt_1m import StrategyActionBtcUSDT1mConnector
+from data_collection.dao.strategy_action_btc_spot_trading_usdt_1m import StrategyActionBtcUSDT1mConnector, \
+    StrategyActionBtcUSDT1mInsertDao
 from data_collection.dao.strategy_status_btc_spot_trading_usdt_1m import StrategyStatusBtcUSDT1mDao, \
     StrategyStatusBtcUSDT1mConnector
 from log import *
-from strategy import StrategyInterface
+from strategy import StrategyInterface, VirtualOrder
 from strategy.maker_only_volatility_strategy.order_scheduler import OrderScheduler
 from strategy.virtual_order import VirtualOrderOne
 from strategy.maker_only_volatility_strategy.order_book import PriceOrderGroupVirtualOrderBook
@@ -124,7 +125,7 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
         :return:
         """
         logging.info(self)
-        self.upload_status()  # 状态数据落库
+        self.upload_status_data()  # 状态数据落库
         self.reset_incremental_status()  # 重置增量数据
         self.update_param()  # 更新参数
 
@@ -175,6 +176,9 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
 
                     # order_scheduler
                     self.order_scheduler.bind(virtual_order=virtual_order, actual_order=actual_order)
+
+                    # 上传action数据
+                    self.upload_action_data(virtual_order)
         # self.debug_log()
 
     def debug_log(self):
@@ -208,6 +212,9 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
                 # open_price = order.price
                 virtual_order = self.order_scheduler.actual_buy_finished(order)
 
+                # 上传action数据
+                self.upload_action_data(virtual_order)
+
                 ## 数据统计用 - START
                 self.analysis_opened_order(
                     open_price=virtual_order.open_price, close_price=virtual_order.close_price, quantity=order.size
@@ -220,6 +227,10 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
             elif order.issell():
                 # 平单完成 保存订单
                 virtual_order = self.order_scheduler.actual_sell_finished(order)
+
+                # 上传action数据
+                self.upload_action_data(virtual_order)
+
                 # 调整借贷资金
                 loan = virtual_order.loan
                 self.loan -= loan
@@ -244,6 +255,10 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
             # 订单回撤 调整借贷资金
             if order.isbuy():
                 virtual_order = self.order_scheduler.actual_order_cancelled(order)
+
+                # 上传action数据 todo 手动cancel
+                self.upload_action_data(virtual_order)
+
                 loan = virtual_order.loan
                 self.loan -= loan
                 self.super_strategy.broker.add_cash(-loan)
@@ -308,7 +323,11 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
                 for order in open_orders:
                     self.super_strategy.cancel(order)
 
-    def upload_status(self):
+    def upload_status_data(self):
+        """
+        上传status数据至数据库
+        :return:
+        """
         open_time = bt.num2date(self.super_strategy.datetime[0])  # 开盘时间
         version = self.STRATEGY_VERSION  # 策略版本
         price = self.get_price()  # 市场价格
@@ -376,9 +395,13 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
             expected_total_value, actual_net_value, expected_net_value, ave_profit_per_closed_order
         )
 
-        self.db_status_connector.insert_single(status)
+        self.db_status_connector.insert_single_queue(status)
 
     def reset_incremental_status(self):
+        """
+        重置增量参数
+        :return:
+        """
         self.opening_order_num = 0  # 开仓挂单数
         self.opening_order_quantity = 0  # 开仓挂单BTC总量
         self.opening_order_value = 0  # 开仓挂单总价；开仓成本=开仓总价 因此不单独计算开仓成本
@@ -393,6 +416,63 @@ class MakerOnlyLongOnlyVolatilityStrategy(StrategyInterface):
         self.closed_order_quantity = 0  # 平仓成交BTC总量
         self.closed_order_value = 0  # 平仓成交总价
         self.closed_order_cost = 0  # 平仓成交成本 = sum(每单成本(每单BTC总量 * 每单开仓挂单价格))
+
+    def upload_action_data(self, order: VirtualOrder):
+        """
+        上传action数据至数据库
+        :return:
+        """
+        """
+            `version`              VARCHAR(255) comment '策略版本',
+            `action_time`          DateTime comment '挂单时间/交易完成时间',
+            `status`               Int8 comment '订单状态: 1.开仓挂单opening 2.已开仓opened 3.平仓挂单closing 4.已平仓closed 5.已取消canceled',
+            `open_price`           DECIMAL(26, 6) comment '开仓价格',
+            `close_price`          DECIMAL(26, 6) comment '平仓价格',
+            `quantity`             Nullable(Decimal(26, 6)) comment '交易量',
+            `open_cost`            DECIMAL(26, 6) comment '开仓成本 = 开仓价格 * 交易量',
+            `expected_gross_value` Nullable(Decimal(26, 6)) comment '期望毛利润',
+            `actual_gross_value`   Nullable(Decimal(26, 6)) comment '实际毛利润',
+            `expected_commission`  Nullable(Decimal(26, 6)) comment '期望佣金值',
+            `actual_commission`    Nullable(Decimal(26, 6)) comment '实际佣金值',
+        """
+        version = self.STRATEGY_VERSION  # 策略版本
+        action_time = bt.num2date(self.super_strategy.datetime[0])  # 挂单时间/交易完成时间
+        # 订单状态: 1.开仓挂单opening 2.已开仓opened 3.平仓挂单closing 4.已平仓closed 5.已取消canceled -1.未知
+        if order.status == "opening":
+            status = 1
+        elif order.status == "opened":
+            status = 2
+        elif order.status == "closing":
+            status = 3
+        elif order.status == "closed":
+            status = 4
+        elif order.status == "canceled":
+            status = 5
+        else:
+            status = -1
+        open_price = order.open_price  # 开仓价格
+        close_price = order.close_price  # 平仓价格
+        quantity = order.quantity  # 交易量
+        open_cost = open_price * quantity  # 开仓成本 = 开仓价格 * 交易量
+        expected_gross_value = order.expected_gross_value  # 期望毛利润
+        actual_gross_value = order.expected_gross_value  # 实际毛利润
+        expected_commission = order.expected_commission  # 期望佣金值
+        actual_commission = order.actual_commission  # 实际佣金值
+
+        action = StrategyActionBtcUSDT1mInsertDao(
+              version,
+              action_time,
+              status,
+              open_price,
+              close_price,
+              quantity,
+              open_cost,
+              expected_gross_value,
+              actual_gross_value,
+              expected_commission,
+              actual_commission,
+        )
+        self.db_action_connector.insert_single_queue(action)
 
     def analysis_opening_order(self, open_price: float, quantity: float):
         """

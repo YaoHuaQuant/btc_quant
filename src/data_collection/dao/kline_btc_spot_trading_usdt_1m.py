@@ -6,7 +6,7 @@ from typing import List
 import pandas as pd
 
 from data_collection.api.binance_api import get_binance_spot_trading_klines
-from data_collection.db import db
+from data_collection.db import new_db_connection
 from log import *
 
 table_name = 'kline_btc_usdt_1m'
@@ -107,7 +107,7 @@ def from_list_KlineBtcUSDT1mDao_to_KlineBtcUSDT1mDaoSimple(data: List[KlineBtcUS
 
 class KlineBtcUSDT1mConnector:
     def __init__(self):
-        self.db_connection = db
+        self.db_connection = new_db_connection()
 
     def select(self, from_timestamp: datetime, to_timestamp: datetime, order: str = 'ASC') -> List[KlineBtcUSDT1mDao]:
         if order != 'ASC' and order != 'DESC':

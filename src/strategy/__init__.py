@@ -56,6 +56,11 @@ class VirtualOrder(ABC):
         self.principal = quantity * open_price / leverage  # 本金
         self.loan = quantity * open_price - self.principal  # 借贷资金
 
+        self.expected_gross_value = None  # 期望毛利润
+        self.actual_gross_value = None  # 实际毛利润
+        self.expected_commission = None  # 期望佣金值
+        self.actual_commission = None  # 实际佣金值
+
         # 强平价格（只作为标记 不触发实际平仓操作）
         if direction == 'long':
             self.forced_liquidation_price = open_price * (1 - 1 / leverage)
@@ -99,6 +104,14 @@ class VirtualOrder(ABC):
     def update_status_closing(self):
         pass
 
+    @abstractmethod
+    def update_status_opened(self):
+        pass
+
+    @abstractmethod
+    def update_status_canceled(self):
+        pass
+
     @staticmethod
     def check_price(price: float):
         if price < 0:
@@ -116,8 +129,8 @@ class VirtualOrder(ABC):
 
     @staticmethod
     def check_status(status: str):
-        if status not in ['opening', 'closing', 'closed']:
-            raise ValueError(f'status must be "opening" or "closing" or "closed", not "{status}"')
+        if status not in ['opening', 'opened', 'closing', 'closed', 'canceled', 'unknown']:
+            raise ValueError(f'status must be "opening" or "closing" or "opened" or "closed" or "canceled" or "unknown", not "{status}"')
 
     @staticmethod
     def check_leverage(leverage: float):

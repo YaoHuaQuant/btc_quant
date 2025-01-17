@@ -21,7 +21,7 @@ class VirtualOrderOne(VirtualOrder):
         2.close_price 平仓价格
         2.quantity (不可变)挂单量
         3.direction: (不可变)订单类型 做多long | 做空short
-        4.status: 订单状态 待开仓opening | 待平仓closing | 已平仓closed
+        4.status: 订单状态 待开仓opening | 已开仓opened | 待平仓closing | 已平仓closed | 已取消canceled | 未知unknown
         5.expected_gross_value 期望毛利润
         6.actual_gross_value  实际毛利润
         7.expected_commission 期望佣金值
@@ -44,6 +44,12 @@ class VirtualOrderOne(VirtualOrder):
 
         self.observer: Callable[[any], None] = observer
         self.actual_order_hash = actual_order_hash
+
+    def update_status_opened(self):
+        self.status = 'opened'
+
+    def update_status_canceled(self):
+        self.status = 'canceled'
 
     def update_status_closing(self):
         """
