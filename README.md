@@ -35,6 +35,12 @@
 | 回测模块   | 	trade/backtesting  | 	使用 Backtrader 进行回测和策略优化 |
 | 实盘交易模块 | 	trade/live_trading | 	对接交易所 API，实现实盘交易        |
 
+## 架构图
+
+[structure.drawio](doc/structure.drawio)
+
+![structure.drawio.png](doc/structure.drawio.png)
+
 ## 各模块实现
 
 1. 数据采集模块
