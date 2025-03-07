@@ -95,7 +95,7 @@ result = model_log.fit(y_data_log, params, x=x_data, method='trust-constr')
 residuals = np.abs(y_data_log - result.best_fit)
 
 # 为极大值/极小值赋予更高的权重
-distance = 200
+distance = 300
 # 找出Price的局部极大值
 peaks, _ = find_peaks(y_data, distance=distance)
 # 找出局部极小值（取负后找峰）
@@ -106,7 +106,7 @@ extrema = np.concatenate([peaks, valleys])  # 合并所有极值点
 # 构造权重数组，初始全为1
 weights = np.ones_like(y_data)
 # 对局部极大值和极小值位置赋予更高的权重
-weights[extrema] = 1 + residuals[extrema] / np.max(residuals)  # 根据残差调整权重
+weights[extrema] = 1 + distance * residuals[extrema] / np.max(residuals)  # 根据残差调整权重
 
 # 二次拟合 加入权重
 result = model_log.fit(y_data_log, params, x=x_data, weights=weights, method='trust-constr')
