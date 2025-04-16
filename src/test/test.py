@@ -1,88 +1,67 @@
-import threading
-import queue
-import clickhouse_connect  # 假设你使用 clickhouse-connect 库
-import backtrader as bt
+import plotly.graph_objects as go
 
-class AsyncClickHouseWriter:
-    def __init__(self, db_config):
-        self.db_config = db_config
-        self.data_queue = queue.Queue()
-        self.stop_event = threading.Event()
-        self.thread = threading.Thread(target=self._worker, daemon=True)
-        self.thread.start()
+# 创建图形对象
+fig = go.Figure()
 
-    def _worker(self):
-        """后台线程从队列中读取数据并写入 ClickHouse"""
-        client = clickhouse_connect.get_client(**self.db_config)
-        while not self.stop_event.is_set():
-            try:
-                # 批量写入数据
-                batch = []
-                while not self.data_queue.empty():
-                    batch.append(self.data_queue.get_nowait())
-                if batch:
-                    client.insert("kline_data_table", batch)
-            except queue.Empty:
-                continue  # 如果队列为空，继续等待
-            except Exception as e:
-                print(f"Error writing to ClickHouse: {e}")
-            finally:
-                client.close()
+# 添加第一条折线，使用默认的 Y 轴（yaxis）
+fig.add_trace(go.Scatter(
+    x=[1, 2, 3],
+    y=[10, 20, 30],
+    name="数据 1",
+    yaxis="y"
+))
 
-    def write(self, data):
-        """将数据放入队列"""
-        self.data_queue.put(data)
+# 添加第二条折线，使用第二个 Y 轴（yaxis2）
+fig.add_trace(go.Scatter(
+    x=[1, 2, 3],
+    y=[100, 200, 300],
+    name="数据 2",
+    yaxis="y2"
+))
 
-    def stop(self):
-        """停止线程"""
-        self.stop_event.set()
-        self.thread.join()
+# 添加第三条折线，使用第三个 Y 轴（yaxis3）
+fig.add_trace(go.Scatter(
+    x=[1, 2, 3],
+    y=[1000, 2000, 3000],
+    name="数据 3",
+    yaxis="y3"
+))
 
-class MyStrategy(bt.Strategy):
-    def __init__(self, writer):
-        self.writer = writer
+# 更新布局，定义三个 Y 轴
+fig.update_layout(
+    title="具有三个 Y 轴的折线图",
+    xaxis=dict(domain=[0.1, 0.9]),  # 设置 x 轴的显示范围
 
-    def next(self):
-        """每根K线触发"""
-        data = {
-            "datetime": self.data.datetime.datetime(0),
-            "open": self.data.open[0],
-            "high": self.data.high[0],
-            "low": self.data.low[0],
-            "close": self.data.close[0],
-            "volume": self.data.volume[0],
-        }
-        # 将数据传递到后台线程
-        self.writer.write(data)
-
-# 配置 ClickHouse 数据库
-db_config = {
-    "host": "localhost",
-    "port": 8123,
-    "username": "default",
-    "password": "",
-    "database": "test",
-}
-
-if __name__ == "__main__":
-    # 创建异步写入器
-    writer = AsyncClickHouseWriter(db_config)
-
-    # 设置 Backtrader 策略
-    cerebro = bt.Cerebro()
-    cerebro.addstrategy(MyStrategy, writer)
-
-    # 添加数据
-    data = bt.feeds.GenericCSVData(
-        dataname="your_data.csv",
-        dtformat="%Y-%m-%d %H:%M:%S",
-        timeframe=bt.TimeFrame.Minutes,
+    yaxis=dict(
+        title=dict(
+            text="数据 1",
+            font=dict(color="blue")
+        ),
+        tickfont=dict(color="blue")
+    ),
+    yaxis2=dict(
+        title=dict(
+            text="数据 2",
+            font=dict(color="red")
+        ),
+        tickfont=dict(color="red"),
+        anchor="free",
+        overlaying="y",
+        side="right",
+        position=0.9
+    ),
+    yaxis3=dict(
+        title=dict(
+            text="数据 3",
+            font=dict(color="green")
+        ),
+        tickfont=dict(color="green"),
+        anchor="free",
+        overlaying="y",
+        side="right",
+        position=1.0
     )
-    cerebro.adddata(data)
+)
 
-    # 启动回测
-    try:
-        cerebro.run()
-    finally:
-        # 确保后台线程停止
-        writer.stop()
+# 显示图形
+fig.show()
