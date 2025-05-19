@@ -10,7 +10,7 @@ def scrypt(first_date: datetime = datetime(2020, 1, 1, 0, 0)):
     logging.info(f'last_date {last_date}')
     # if last_date > first_date:
     #     first_date = last_date
-    first_date = datetime(2019, 10, 26, 0, 0)
+    first_date = datetime(2019, 5, 15, 2, 55)
     connection.collect_up2date_data(first_date)
 
 

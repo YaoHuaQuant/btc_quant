@@ -50,4 +50,4 @@ class ClickHouseManager:
                 print(f"Error writing to ClickHouse: {e}")
 
 def new_db_connection() -> ClickHouseManager:
-    return ClickHouseManager(host='localhost', user='gx', password='1234566', database='btc_quant')
+    return ClickHouseManager(host='192.168.3.64', user='gx', password='1234566', database='btc_quant')
